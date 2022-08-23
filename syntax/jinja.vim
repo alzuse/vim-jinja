@@ -92,4 +92,60 @@ hi def link jinjaNumber Constant
 hi def link jinjaComment Comment
 
 
+
+" jinja 'fold' definition
+
+" fold for loops
+syn region jinjaFoldFor
+      \ start="<%[+-]\? *\<for\>"
+      \ end="<%[+-]\? *endfor *%>"
+      \ transparent fold
+      \ keepend extend
+      \ skip=+"\%(\\"\|[^"]\)\{-}\%("\|$\)\|'[^']\{-}'+ "comment to fix highlight on wiki'
+
+" fold if...else...endif constructs
+"
+syn region jinjaFoldIfContainer
+      \ start="<%[+-]\? *\<if\>"
+      \ end="<%[+-]\? *endif *%>"
+      \ transparent
+      \ keepend extend
+      \ contains=NONE
+      \ skip=+"\%(\\"\|[^"]\)\{-}\%("\|$\)\|'[^']\{-}'+ "comment to fix highlight on wiki'
+
+syn region jinjaFoldIf
+      \ start="<%[+-]\? *\<if\>"
+      \ end="^<%[+-]\?\s*\\\?\s*elif\>"ms=s-1,me=s-1
+      \ fold transparent
+      \ keepend
+      \ contained containedin=jinjaFoldIfContainer
+      \ nextgroup=jinjaFoldElseIf,jinjaFoldElse
+      \ contains=TOP
+      \ skip=+"\%(\\"\|[^"]\)\{-}\%("\|$\)\|'[^']\{-}'+ "comment to fix highlight on wiki'
+
+syn region jinjaFoldElseIf
+      \ start="<%[+-]\?\s*\<elif\>"
+      \ end="^<%[+-]\?\s*\\\?\s*elif\>"ms=s-1,me=s-1
+      \ fold transparent
+      \ keepend
+      \ contained containedin=jinjaFoldIfContainer
+      \ nextgroup=jinjaFoldElseIf,jinjaFoldElse
+      \ contains=TOP
+      \ skip=+"\%(\\"\|[^"]\)\{-}\%("\|$\)\|'[^']\{-}'+ "comment to fix highlight on wiki'
+syn region jinjaFoldElse
+      \ start="<%[+-]\?\s*\<else\>"
+      \ end="<%[+-]\?\s*\<endif\>"
+      \ fold transparent
+      \ keepend
+      \ contained containedin=jinjaFoldIfContainer
+      \ contains=TOP
+      \ skip=+"\%(\\"\|[^"]\)\{-}\%("\|$\)\|'[^']\{-}'+ "comment to fix highlight on wiki'
+
+
+
+
+
 let b:current_syntax = "jinja"
+
+
+
