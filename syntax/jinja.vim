@@ -1,7 +1,7 @@
 " jinja syntax file
 " Language: Jinja HTML template
-" Maintainer: Hsiaoming Yang <lepture@me.com>
-" Last Change: Sep 13, 2012
+" Maintainer: Hsiaoming Yang <lepture@me.com>, Al Z <alzuse@126.com>
+" Last Change: Oct 23, 2022
 
 " only support 6.x+
 
@@ -15,6 +15,13 @@ endif
 
 runtime! syntax/html.vim
 unlet b:current_syntax
+
+let g:jinja_block_start_string = get(g:, "jinja_block_start_string", "{%")
+let g:jinja_block_end_string   = get(g:, "jinja_block_end_string", "%}")
+let g:jinja_variable_start_string = get(g:, "jinja_variable_start_string", "{{")
+let g:jinja_variable_end_string   = get(g:, "jinja_variable_end_string", "}}")
+let g:jinja_comment_start_string = get(g:, "jinja_comment_start_string", "{#")
+let g:jinja_comment_end_string   = get(g:, "jinja_comment_end_string", "#}")
 
 syntax case match
 
