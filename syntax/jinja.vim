@@ -19,74 +19,82 @@ let g:jinja_comment_start_string = get(g:, "jinja_comment_start_string", "<#")
 let g:jinja_comment_end_string   = get(g:, "jinja_comment_end_string", "#>")
 
 syntax case match
+" Jinja template built-in tags and parameters (without filter, macro, is and raw, they
+" have special threatment)
+syn keyword jinjaStatement containedin=jinjaVarBlock,jinjaTagBlock,jinjaNested contained and if else in not or recursive as import
 
-" jinja template built-in tags and parameters
-" 'comment' doesn't appear here because it gets special treatment
-syn keyword jinjaStatement contained if else elif endif is not
-syn keyword jinjaStatement contained for in recursive endfor
-syn keyword jinjaStatement contained raw endraw
-syn keyword jinjaStatement contained block endblock extends super scoped
-syn keyword jinjaStatement contained macro endmacro call endcall
-syn keyword jinjaStatement contained from import as do continue break
-syn keyword jinjaStatement contained filter endfilter set endset
-syn keyword jinjaStatement contained include ignore missing
-syn keyword jinjaStatement contained with without context endwith
-syn keyword jinjaStatement contained trans endtrans pluralize
-syn keyword jinjaStatement contained autoescape endautoescape
+syn keyword jinjaStatement containedin=jinjaVarBlock,jinjaTagBlock,jinjaNested contained is filter skipwhite nextgroup=jinjaFilter
+syn keyword jinjaStatement containedin=jinjaTagBlock contained macro skipwhite nextgroup=jinjaFunction
+syn keyword jinjaStatement containedin=jinjaTagBlock contained block skipwhite nextgroup=jinjaBlockName
 
-" jinja templete built-in filters
-syn keyword jinjaFilter contained abs attr batch capitalize center default
-syn keyword jinjaFilter contained dictsort escape filesizeformat first
-syn keyword jinjaFilter contained float forceescape format groupby indent
-syn keyword jinjaFilter contained int join last length list lower pprint
-syn keyword jinjaFilter contained random replace reverse round safe slice
-syn keyword jinjaFilter contained sort string striptags sum
-syn keyword jinjaFilter contained title trim truncate upper urlize
-syn keyword jinjaFilter contained wordcount wordwrap
-syn keyword jinjaFilter contained pround
-syn keyword jinjaFilter contained to_1x3 to_1x5 to_1x7 to_3x3 to_5x5 to_7x7
-syn keyword jinjaFilter contained xto_1xn xto_1xn_k xto_nxn
-syn keyword jinjaFilter contained ds_table
+" Variable Names
+syn match jinjaVariable containedin=jinjaVarBlock,jinjaTagBlock,jinjaNested contained /[a-zA-Z_][a-zA-Z0-9_]*/
+syn keyword jinjaSpecial containedin=jinjaVarBlock,jinjaTagBlock,jinjaNested contained false true none False True None loop super caller varargs kwargs
 
-" jinja template built-in tests
-syn keyword jinjaTest contained callable defined divisibleby escaped
-syn keyword jinjaTest contained even iterable lower mapping none number
-syn keyword jinjaTest contained odd sameas sequence string undefined upper
+" Filters
+syn match jinjaOperator "|" containedin=jinjaVarBlock,jinjaTagBlock,jinjaNested contained skipwhite nextgroup=jinjaFilter
+syn match jinjaFilter contained /[a-zA-Z_][a-zA-Z0-9_]*/
+syn match jinjaFunction contained /[a-zA-Z_][a-zA-Z0-9_]*/
+syn match jinjaBlockName contained /[a-zA-Z_][a-zA-Z0-9_]*/
 
-syn keyword jinjaFunction contained range lipsum dict cycler joiner
+" Jinja template constants
+syn region jinjaString containedin=jinjaVarBlock,jinjaTagBlock,jinjaNested contained start=/"/ skip=/\(\\\)\@<!\(\(\\\\\)\@>\)*\\"/ end=/"/
+syn region jinjaString containedin=jinjaVarBlock,jinjaTagBlock,jinjaNested contained start=/'/ skip=/\(\\\)\@<!\(\(\\\\\)\@>\)*\\'/ end=/'/
+syn match jinjaNumber containedin=jinjaVarBlock,jinjaTagBlock,jinjaNested contained /[0-9]\+\(\.[0-9]\+\)\?/
 
+" Operators
+syn match jinjaOperator containedin=jinjaVarBlock,jinjaTagBlock,jinjaNested contained /[+\-*\/<>=!,:]/
+syn match jinjaPunctuation containedin=jinjaVarBlock,jinjaTagBlock,jinjaNested contained /[()\[\]]/
+syn match jinjaOperator containedin=jinjaVarBlock,jinjaTagBlock,jinjaNested contained /\./ nextgroup=jinjaAttribute
+syn match jinjaAttribute contained /[a-zA-Z_][a-zA-Z0-9_]*/
 
-" Keywords to highlight within comments
-syn keyword jinjaTodo contained TODO FIXME XXX
+" Jinja template tag and variable blocks
+syn region jinjaNested matchgroup=jinjaOperator start="(" end=")" transparent display containedin=jinjaVarBlock,jinjaTagBlock,jinjaNested contained
+syn region jinjaNested matchgroup=jinjaOperator start="\[" end="\]" transparent display containedin=jinjaVarBlock,jinjaTagBlock,jinjaNested contained
+syn region jinjaNested matchgroup=jinjaOperator start="{" end="}" transparent display containedin=jinjaVarBlock,jinjaTagBlock,jinjaNested contained
+syn region jinjaTagBlock matchgroup=jinjaTagDelim start=/<%[-+]\?/ end=/[-+]\?%>/ containedin=ALLBUT,jinjaTagBlock,jinjaVarBlock,jinjaRaw,jinjaString,jinjaNested,jinjaComment
 
-" jinja template constants (always surrounded by double quotes)
-syn region jinjaArgument contained start=/"/ skip=/\\"/ end=/"/
-syn region jinjaArgument contained start=/'/ skip=/\\'/ end=/'/
-syn keyword jinjaArgument contained true false
+syn region jinjaVarBlock matchgroup=jinjaVarDelim start=/<$-\?/ end=/-\?$>/ containedin=ALLBUT,jinjaTagBlock,jinjaVarBlock,jinjaRaw,jinjaString,jinjaNested,jinjaComment
 
-" Mark illegal characters within tag and variables blocks
-syn match jinjaTagError contained "#>\|<$\|[^%]$>\|[&#]"
-syn match jinjaVarError contained "#>\|<%\|%>\|[<>!&#%]"
-syn cluster jinjaBlocks add=jinjaTagBlock,jinjaVarBlock,jinjaComBlock,jinjaComment
+" Jinja template 'raw' tag
+syn region jinjaRaw matchgroup=jinjaRawDelim start="<%\s*raw\s*%>" end="<%\s*endraw\s*%>" containedin=ALLBUT,jinjaTagBlock,jinjaVarBlock,jinjaString,jinjaComment
 
-" jinja template tag and variable blocks
-syn region jinjaTagBlock start="<%" end="%>" contains=jinjaStatement,jinjaFilter,jinjaArgument,jinjaFilter,jinjaTest,jinjaTagError display containedin=ALLBUT,@jinjaBlocks
-syn region jinjaVarBlock start="<$" end="$>" contains=jinjaFilter,jinjaArgument,jinjaVarError display containedin=ALLBUT,@jinjaBlocks
-syn region jinjaComBlock start="<#" end="#>" contains=jinjaTodo containedin=ALLBUT,@jinjaBlocks
+" Jinja comments
+syn region jinjaComment matchgroup=jinjaCommentDelim start="<#" end="#>" containedin=ALLBUT,jinjaTagBlock,jinjaVarBlock,jinjaString,jinjaComment
+
+" Block start keywords.  A bit tricker.  We only highlight at the start of a
+" tag block and only if the name is not followed by a comma or equals sign
+" which usually means that we have to deal with an assignment.
+syn match jinjaStatement containedin=jinjaTagBlock contained /\(<%[-+]\?\s*\)\@<=\<[a-zA-Z_][a-zA-Z0-9_]*\>\(\s*[,=]\)\@!/
+
+" and context modifiers
+syn match jinjaStatement containedin=jinjaTagBlock contained /\<with\(out\)\?\s\+context\>/
 
 
-hi def link jinjaTagBlock PreProc
-hi def link jinjaVarBlock PreProc
-hi def link jinjaStatement Statement
-hi def link jinjaFunction Function
-hi def link jinjaTest Type
-hi def link jinjaFilter Identifier
-hi def link jinjaArgument Constant
-hi def link jinjaTagError Error
-hi def link jinjaVarError Error
-hi def link jinjaError Error
-hi def link jinjaComment Comment
-hi def link jinjaComBlock Comment
-hi def link jinjaTodo Todo
+command -nargs=+ HiLink hi def link <args>
+
+HiLink jinjaPunctuation jinjaOperator
+HiLink jinjaAttribute jinjaVariable
+HiLink jinjaFunction jinjaFilter
+
+HiLink jinjaTagDelim jinjaTagBlock
+HiLink jinjaVarDelim jinjaVarBlock
+HiLink jinjaCommentDelim jinjaComment
+HiLink jinjaRawDelim jinja
+
+HiLink jinjaSpecial Special
+HiLink jinjaOperator Normal
+HiLink jinjaRaw Normal
+HiLink jinjaTagBlock PreProc
+HiLink jinjaVarBlock PreProc
+HiLink jinjaStatement Statement
+HiLink jinjaFilter Function
+HiLink jinjaBlockName Function
+HiLink jinjaVariable Identifier
+HiLink jinjaString Constant
+HiLink jinjaNumber Constant
+HiLink jinjaComment Comment
+
+delcommand HiLink
 
 let b:current_syntax = "jinja"
