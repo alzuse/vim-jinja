@@ -23,7 +23,9 @@ if exists('loaded_matchit')
   "   - "+": disable the lstrip_blocks (only at start)
   "   - "-": the whitespaces before or after that block will be removed
   let b:match_words = '<:>,' .
-        \ '<%[-+]\? *\%(end\)\@!\(\w\+\)\>.\{-}%>:<%-\? *end\1\>.\{-}%>'
+        \ '<%[-+]\? *if *\w\+\>.\{-}%>:<%[-+]\? *elif *\w\+\>.\{-}%>:<%-\? *else *%>:<%-\? *endif *%>,' .
+        \ '<%[-+]\? *\%(end\)\@!\(\w\+\)\>.\{-}%>:<%-\? *end\1\>.\{-}%>,' .
+        \ ''
 endif
 
-" vim:set sw=2:
+" vim:set sw=4:
