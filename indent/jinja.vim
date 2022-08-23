@@ -9,9 +9,9 @@ if exists("b:did_indent")
 endif
 
 " Use HTML formatting rules.
-setl indentkeys=o,O,<Return>,<>>,!^F
-runtime! indent/html.vim		 +setl nosmartindent
-let b:did_indent = 1
+"" setl indentkeys=o,O,<Return>,<>>,!^F
+"" runtime! indent/html.vim		 +setl nosmartindent
+"" let b:did_indent = 1
 
 " Indent within the jinja tags
 " Made by Steve Losh <steve@stevelosh.com>
@@ -22,7 +22,7 @@ if &l:indentexpr == ''
         let &l:indentexpr = 'indent(prevnonblank(v:lnum-1))'
     endif
 endif
-let b:html_indentexpr = &l:indentexpr
+let b:local_indentexpr = &l:indentexpr
 
 let b:did_indent = 1
 
@@ -44,14 +44,14 @@ function! GetDjangoIndent(...)
 
     call cursor(v:lnum,vcol)
 
-    exe "let ind = ".b:html_indentexpr
+    exe "let ind = ".b:local_indentexpr
 
     let lnum = prevnonblank(v:lnum-1)
     let pnb = getline(lnum)
     let cur = getline(v:lnum)
 
-    let tagstart = '.*' . '{%-\?\s*'
-    let tagend = '.*-\?%}' . '.*'
+    let tagstart = '.*' . '<%-\?\s*'
+    let tagend = '.*-\?%>' . '.*'
 
     let blocktags = '\(block\|for\|if\|with\|autoescape\|comment\|filter\|spaceless\|macro\)'
     let midtags = '\(empty\|else\|elif\)'

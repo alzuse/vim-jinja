@@ -9,19 +9,14 @@ if exists("b:current_syntax")
   finish
 endif
 
-if !exists("main_syntax")
-  let main_syntax = 'html'
-endif
-
-runtime! syntax/html.vim
 unlet b:current_syntax
 
-let g:jinja_block_start_string = get(g:, "jinja_block_start_string", "{%")
-let g:jinja_block_end_string   = get(g:, "jinja_block_end_string", "%}")
-let g:jinja_variable_start_string = get(g:, "jinja_variable_start_string", "{{")
-let g:jinja_variable_end_string   = get(g:, "jinja_variable_end_string", "}}")
-let g:jinja_comment_start_string = get(g:, "jinja_comment_start_string", "{#")
-let g:jinja_comment_end_string   = get(g:, "jinja_comment_end_string", "#}")
+let g:jinja_block_start_string = get(g:, "jinja_block_start_string", "<%")
+let g:jinja_block_end_string   = get(g:, "jinja_block_end_string", "%>")
+let g:jinja_variable_start_string = get(g:, "jinja_variable_start_string", "<$")
+let g:jinja_variable_end_string   = get(g:, "jinja_variable_end_string", "$>")
+let g:jinja_comment_start_string = get(g:, "jinja_comment_start_string", "<#")
+let g:jinja_comment_end_string   = get(g:, "jinja_comment_end_string", "#>")
 
 syntax case match
 
@@ -48,6 +43,10 @@ syn keyword jinjaFilter contained random replace reverse round safe slice
 syn keyword jinjaFilter contained sort string striptags sum
 syn keyword jinjaFilter contained title trim truncate upper urlize
 syn keyword jinjaFilter contained wordcount wordwrap
+syn keyword jinjaFilter contained pround
+syn keyword jinjaFilter contained to_1x3 to_1x5 to_1x7 to_3x3 to_5x5 to_7x7
+syn keyword jinjaFilter contained xto_1xn xto_1xn_k xto_nxn
+syn keyword jinjaFilter contained ds_table
 
 " jinja template built-in tests
 syn keyword jinjaTest contained callable defined divisibleby escaped
@@ -66,14 +65,14 @@ syn region jinjaArgument contained start=/'/ skip=/\\'/ end=/'/
 syn keyword jinjaArgument contained true false
 
 " Mark illegal characters within tag and variables blocks
-syn match jinjaTagError contained "#}\|{{\|[^%]}}\|[&#]"
-syn match jinjaVarError contained "#}\|{%\|%}\|[<>!&#%]"
+syn match jinjaTagError contained "#>\|<$\|[^%]$>\|[&#]"
+syn match jinjaVarError contained "#>\|<%\|%>\|[<>!&#%]"
 syn cluster jinjaBlocks add=jinjaTagBlock,jinjaVarBlock,jinjaComBlock,jinjaComment
 
 " jinja template tag and variable blocks
-syn region jinjaTagBlock start="{%" end="%}" contains=jinjaStatement,jinjaFilter,jinjaArgument,jinjaFilter,jinjaTest,jinjaTagError display containedin=ALLBUT,@jinjaBlocks
-syn region jinjaVarBlock start="{{" end="}}" contains=jinjaFilter,jinjaArgument,jinjaVarError display containedin=ALLBUT,@jinjaBlocks
-syn region jinjaComBlock start="{#" end="#}" contains=jinjaTodo containedin=ALLBUT,@jinjaBlocks
+syn region jinjaTagBlock start="<%" end="%>" contains=jinjaStatement,jinjaFilter,jinjaArgument,jinjaFilter,jinjaTest,jinjaTagError display containedin=ALLBUT,@jinjaBlocks
+syn region jinjaVarBlock start="<$" end="$>" contains=jinjaFilter,jinjaArgument,jinjaVarError display containedin=ALLBUT,@jinjaBlocks
+syn region jinjaComBlock start="<#" end="#>" contains=jinjaTodo containedin=ALLBUT,@jinjaBlocks
 
 
 hi def link jinjaTagBlock PreProc
