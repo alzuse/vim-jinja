@@ -9,7 +9,6 @@ if exists("b:current_syntax")
   finish
 endif
 
-unlet b:current_syntax
 
 let g:jinja_block_start_string = get(g:, "jinja_block_start_string", "<%")
 let g:jinja_block_end_string   = get(g:, "jinja_block_end_string", "%>")
@@ -71,30 +70,26 @@ syn match jinjaStatement containedin=jinjaTagBlock contained /\(<%[-+]\?\s*\)\@<
 syn match jinjaStatement containedin=jinjaTagBlock contained /\<with\(out\)\?\s\+context\>/
 
 
-command -nargs=+ HiLink hi def link <args>
 
-HiLink jinjaPunctuation jinjaOperator
-HiLink jinjaAttribute jinjaVariable
-HiLink jinjaFunction jinjaFilter
+hi def link jinjaPunctuation jinjaOperator
+hi def link jinjaAttribute jinjaVariable
+hi def link jinjaFunction jinjaFilter
+hi def link jinjaTagDelim jinjaTagBlock
+hi def link jinjaVarDelim jinjaVarBlock
+hi def link jinjaCommentDelim jinjaComment
+hi def link jinjaRawDelim jinja
+hi def link jinjaSpecial Special
+hi def link jinjaOperator Normal
+hi def link jinjaRaw Normal
+hi def link jinjaTagBlock PreProc
+hi def link jinjaVarBlock PreProc
+hi def link jinjaStatement Statement
+hi def link jinjaFilter Function
+hi def link jinjaBlockName Function
+hi def link jinjaVariable Identifier
+hi def link jinjaString Constant
+hi def link jinjaNumber Constant
+hi def link jinjaComment Comment
 
-HiLink jinjaTagDelim jinjaTagBlock
-HiLink jinjaVarDelim jinjaVarBlock
-HiLink jinjaCommentDelim jinjaComment
-HiLink jinjaRawDelim jinja
-
-HiLink jinjaSpecial Special
-HiLink jinjaOperator Normal
-HiLink jinjaRaw Normal
-HiLink jinjaTagBlock PreProc
-HiLink jinjaVarBlock PreProc
-HiLink jinjaStatement Statement
-HiLink jinjaFilter Function
-HiLink jinjaBlockName Function
-HiLink jinjaVariable Identifier
-HiLink jinjaString Constant
-HiLink jinjaNumber Constant
-HiLink jinjaComment Comment
-
-delcommand HiLink
 
 let b:current_syntax = "jinja"
