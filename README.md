@@ -7,6 +7,15 @@ Jinja bundle for vim.
 
 1. full syntax support
 2. great indent support
+3. folding support
+4. more conspicuous color scheme
+5. modified jinja tag support
+
+## Jinja tag modification
+
+    <$ var $>    # instead of  {{ var }}
+    <% if ... %> # instead of  {% if ... %}
+    <% for ... %> # instead of {% for ... %}
 
 ## Installation
 
@@ -15,7 +24,7 @@ Jinja bundle for vim.
 If you are not using vundle, you really should have a try.
 Edit your vimrc:
 
-    Bundle "lepture/vim-jinja"
+    Bundle "alzuse/vim-jinja"
 
 And install it:
 
@@ -23,27 +32,23 @@ And install it:
     :BundleInstall
 
 
-### Install with [pathogen](https://github.com/tpope/vim-pathogen)
+### Install with [Plug](https://github.com/junegunn/vim-plug)
 
-If you prefer tpope's pathogen, that's ok. Just clone it:
+If you prefer Plug, Edit your vimrc:
 
-    cd ~/.vim/bundle
-    git clone https://github.com/lepture/vim-jinja.git
+    Plug "alzuse/vim-jinja"
+
+And install it:
+
+    :so ~/.vimrc
+    :PlugInstall
 
 
 ## Configuration
 
-No configuration is needed, if you are using vim 7.2+, it will detect if
-a html file is a jinja template.
-
-But if you want to ensure it works well, you can edit your vimrc:
-
-```vim
-au BufNewFile,BufRead *.html,*.htm,*.shtml,*.stm set ft=jinja
-```
-
+No configuration is needed
 
 ## Bug report
 
-Report a bug on [GitHub Issues](https://github.com/lepture/vim-jinja/issues).
+Report a bug on [GitHub Issues](https://github.com/alzuse/vim-jinja/issues).
 

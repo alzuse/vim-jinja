@@ -1,5 +1,5 @@
 " jinja syntax file
-" Language: Jinja HTML template
+" Language: Jinja template
 " Maintainer: Hsiaoming Yang <lepture@me.com>, Al Z <alzuse@126.com>
 " Last Change: Oct 23, 2022
 
