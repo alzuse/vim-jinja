@@ -18,134 +18,151 @@ let g:jinja_comment_start_string = get(g:, "jinja_comment_start_string", "<#")
 let g:jinja_comment_end_string   = get(g:, "jinja_comment_end_string", "#>")
 
 syntax case match
-" Jinja template built-in tags and parameters (without filter, macro, is and raw, they
-" have special threatment)
-syn keyword jinjaStatement containedin=jinjaVarBlock,jinjaTagBlock,jinjaNested contained and if else in not or recursive as import
 
-syn keyword jinjaStatement containedin=jinjaVarBlock,jinjaTagBlock,jinjaNested contained is filter skipwhite nextgroup=jinjaFilter
-syn keyword jinjaStatement containedin=jinjaTagBlock contained macro skipwhite nextgroup=jinjaFunction
-syn keyword jinjaStatement containedin=jinjaTagBlock contained block skipwhite nextgroup=jinjaBlockName
+" jinja template built-in tags and parameters
+" 'comment' doesn't appear here because it gets special treatment
+syn keyword jinjaStatement contained if else elif endif is not
+syn keyword jinjaStatement contained for in recursive endfor
+syn keyword jinjaStatement contained raw endraw
+syn keyword jinjaStatement contained block endblock extends super scoped
+syn keyword jinjaStatement contained macro endmacro call endcall
+syn keyword jinjaStatement contained from import as do continue break
+syn keyword jinjaStatement contained filter endfilter set endset
+syn keyword jinjaStatement contained include ignore missing
+syn keyword jinjaStatement contained with without context endwith
+syn keyword jinjaStatement contained trans endtrans pluralize
+syn keyword jinjaStatement contained autoescape endautoescape
 
-" Variable Names
-syn match jinjaVariable containedin=jinjaVarBlock,jinjaTagBlock,jinjaNested contained /[a-zA-Z_][a-zA-Z0-9_]*/
-syn keyword jinjaSpecial containedin=jinjaVarBlock,jinjaTagBlock,jinjaNested contained false true none False True None loop super caller varargs kwargs
+" jinja templete built-in filters
+syn keyword jinjaFilter contained abs attr batch capitalize center default
+syn keyword jinjaFilter contained dictsort escape filesizeformat first
+syn keyword jinjaFilter contained float forceescape format groupby indent
+syn keyword jinjaFilter contained int join last length list lower pprint
+syn keyword jinjaFilter contained random replace reverse round safe slice
+syn keyword jinjaFilter contained sort string striptags sum
+syn keyword jinjaFilter contained title trim truncate upper urlize
+syn keyword jinjaFilter contained wordcount wordwrap
+syn keyword jinjaFilter contained pround ds_table
+syn keyword jinjaFilter contained xto_1xn xto_1xn_k xto_nxn
+syn match jinjaFilter contained /to_[0-9]\+x[0-9]\+/
 
-" Filters
-syn match jinjaOperator "|" containedin=jinjaVarBlock,jinjaTagBlock,jinjaNested contained skipwhite nextgroup=jinjaFilter
-syn match jinjaFilter contained /[a-zA-Z_][a-zA-Z0-9_]*/
-syn match jinjaFunction contained /[a-zA-Z_][a-zA-Z0-9_]*/
-syn match jinjaBlockName contained /[a-zA-Z_][a-zA-Z0-9_]*/
+" jinja template built-in tests
+syn keyword jinjaTest contained callable defined divisibleby escaped
+syn keyword jinjaTest contained even iterable lower mapping none number
+syn keyword jinjaTest contained odd sameas sequence string undefined upper
 
-" Jinja template constants
-syn region jinjaString containedin=jinjaVarBlock,jinjaTagBlock,jinjaNested contained start=/"/ skip=/\(\\\)\@<!\(\(\\\\\)\@>\)*\\"/ end=/"/
-syn region jinjaString containedin=jinjaVarBlock,jinjaTagBlock,jinjaNested contained start=/'/ skip=/\(\\\)\@<!\(\(\\\\\)\@>\)*\\'/ end=/'/
-syn match jinjaNumber containedin=jinjaVarBlock,jinjaTagBlock,jinjaNested contained /[0-9]\+\(\.[0-9]\+\)\?/
-
-" Operators
-syn match jinjaOperator containedin=jinjaVarBlock,jinjaTagBlock,jinjaNested contained /[+\-*\/<>=!,:]/
-syn match jinjaPunctuation containedin=jinjaVarBlock,jinjaTagBlock,jinjaNested contained /[()\[\]]/
-syn match jinjaOperator containedin=jinjaVarBlock,jinjaTagBlock,jinjaNested contained /\./ nextgroup=jinjaAttribute
-syn match jinjaAttribute contained /[a-zA-Z_][a-zA-Z0-9_]*/
-
-" Jinja template tag and variable blocks
-syn region jinjaNested matchgroup=jinjaOperator start="(" end=")" transparent display containedin=jinjaVarBlock,jinjaTagBlock,jinjaNested contained
-syn region jinjaNested matchgroup=jinjaOperator start="\[" end="\]" transparent display containedin=jinjaVarBlock,jinjaTagBlock,jinjaNested contained
-syn region jinjaNested matchgroup=jinjaOperator start="{" end="}" transparent display containedin=jinjaVarBlock,jinjaTagBlock,jinjaNested contained
-syn region jinjaTagBlock matchgroup=jinjaTagDelim start=/<%[-+]\?/ end=/[-+]\?%>/ containedin=ALLBUT,jinjaTagBlock,jinjaVarBlock,jinjaRaw,jinjaString,jinjaNested,jinjaComment
-
-syn region jinjaVarBlock matchgroup=jinjaVarDelim start=/<$-\?/ end=/-\?$>/ containedin=ALLBUT,jinjaTagBlock,jinjaVarBlock,jinjaRaw,jinjaString,jinjaNested,jinjaComment
-
-" Jinja template 'raw' tag
-syn region jinjaRaw matchgroup=jinjaRawDelim start="<%\s*raw\s*%>" end="<%\s*endraw\s*%>" containedin=ALLBUT,jinjaTagBlock,jinjaVarBlock,jinjaString,jinjaComment
-
-" Jinja comments
-syn region jinjaComment matchgroup=jinjaCommentDelim start="<#" end="#>" containedin=ALLBUT,jinjaTagBlock,jinjaVarBlock,jinjaString,jinjaComment
-
-" Block start keywords.  A bit tricker.  We only highlight at the start of a
-" tag block and only if the name is not followed by a comma or equals sign
-" which usually means that we have to deal with an assignment.
-syn match jinjaStatement containedin=jinjaTagBlock contained /\(<%[-+]\?\s*\)\@<=\<[a-zA-Z_][a-zA-Z0-9_]*\>\(\s*[,=]\)\@!/
-
-" and context modifiers
-syn match jinjaStatement containedin=jinjaTagBlock contained /\<with\(out\)\?\s\+context\>/
+syn keyword jinjaFunction contained range lipsum dict cycler joiner
 
 
+" Keywords to highlight within comments
+syn keyword jinjaTodo contained TODO FIXME XXX
 
-hi def link jinjaPunctuation jinjaOperator
-hi def link jinjaAttribute jinjaVariable
-hi def link jinjaFunction jinjaFilter
-hi def link jinjaTagDelim jinjaTagBlock
-hi def link jinjaVarDelim jinjaVarBlock
-hi def link jinjaCommentDelim jinjaComment
-hi def link jinjaRawDelim jinja
-hi def link jinjaSpecial Special
-hi def link jinjaOperator Normal
-hi def link jinjaRaw Normal
-hi def link jinjaTagBlock PreProc
-hi def link jinjaVarBlock PreProc
-hi def link jinjaStatement Statement
-hi def link jinjaFilter Function
-hi def link jinjaBlockName Function
-hi def link jinjaVariable Identifier
-hi def link jinjaString Constant
-hi def link jinjaNumber Constant
-hi def link jinjaComment Comment
+" jinja template constants (always surrounded by double quotes)
+syn region jinjaArgument contained start=/"/ skip=/\\"/ end=/"/
+syn region jinjaArgument contained start=/'/ skip=/\\'/ end=/'/
+syn keyword jinjaArgument contained true false
+
+" Mark illegal characters within tag and variables blocks
+syn match jinjaTagError contained "#>\|<\$\|[^%]\$>\|[&#]"
+syn match jinjaVarError contained "#>\|<%\|%>\|[!&#]"
+syn cluster jinjaBlocks add=jinjaTagBlock,jinjaVarBlock,jinjaComBlock,jinjaComment
+
+" jinja template tag and variable blocks
+syn region jinjaTagBlock start="<%" end="%>" contains=jinjaStatement,jinjaFilter,jinjaArgument,jinjaFilter,jinjaTest,jinjaTagError display containedin=ALLBUT,@jinjaBlocks
+syn region jinjaVarBlock start="<\$" end="\$>" contains=jinjaFilter,jinjaArgument,jinjaVarError display containedin=ALLBUT,@jinjaBlocks
+syn region jinjaComBlock start="<#" end="#>" contains=jinjaTodo containedin=ALLBUT,@jinjaBlocks
 
 
+" syn cluster jinjaTmpl remove=jinjaTagBlock,jinjaVarBlock,jinjaComBlock,jinjaComment
 
-" jinja 'fold' definition
+syn region jinjaTmpl start="." end="." skip="<%\|\$\|#.{-}%\|\$\|#>"
 
-" fold for loops
-syn region jinjaFoldFor
-      \ start="<%[+-]\? *\<for\>"
-      \ end="<%[+-]\? *endfor *%>"
-      \ transparent fold
-      \ keepend extend
-      \ skip=+"\%(\\"\|[^"]\)\{-}\%("\|$\)\|'[^']\{-}'+ "comment to fix highlight on wiki'
+""@  hi def link jinjaTagBlock PreProc
+""@  hi def link jinjaVarBlock PreProc
+""@  hi def link jinjaStatement Statement
+""@  hi def link jinjaFunction Function
+""@  hi def link jinjaTest Type
+""@  hi def link jinjaFilter Identifier
+""@  hi def link jinjaArgument Constant
+""@  hi def link jinjaTagError Error
+""@  hi def link jinjaVarError Error
+""@  hi def link jinjaError Error
+""@  hi def link jinjaComment Comment
+""@  hi def link jinjaComBlock Comment
+""@  hi def link jinjaTodo Todo
 
-" fold if...else...endif constructs
-"
-syn region jinjaFoldIfContainer
-      \ start="<%[+-]\? *\<if\>"
-      \ end="<%[+-]\? *endif *%>"
-      \ transparent
-      \ keepend extend
-      \ contains=NONE
-      \ skip=+"\%(\\"\|[^"]\)\{-}\%("\|$\)\|'[^']\{-}'+ "comment to fix highlight on wiki'
+colo elflord
 
-syn region jinjaFoldIf
-      \ start="<%[+-]\? *\<if\>"
-      \ end="^<%[+-]\?\s*\\\?\s*elif\>"ms=s-1,me=s-1
-      \ fold transparent
-      \ keepend
-      \ contained containedin=jinjaFoldIfContainer
-      \ nextgroup=jinjaFoldElseIf,jinjaFoldElse
-      \ contains=TOP
-      \ skip=+"\%(\\"\|[^"]\)\{-}\%("\|$\)\|'[^']\{-}'+ "comment to fix highlight on wiki'
+hi CJinjaToken   guifg=#00C0FF gui=NONE cterm=NONE
+hi CJinjaKeyword guifg=#FFFF00 gui=NONE cterm=NONE
+hi CJinjaFunc    guifg=#5CCEC0 gui=NONE cterm=NONE
+hi CJinjaComment guifg=#808080 gui=NONE cterm=NONE
 
-syn region jinjaFoldElseIf
-      \ start="<%[+-]\?\s*\<elif\>"
-      \ end="^<%[+-]\?\s*\\\?\s*elif\>"ms=s-1,me=s-1
-      \ fold transparent
-      \ keepend
-      \ contained containedin=jinjaFoldIfContainer
-      \ nextgroup=jinjaFoldElseIf,jinjaFoldElse
-      \ contains=TOP
-      \ skip=+"\%(\\"\|[^"]\)\{-}\%("\|$\)\|'[^']\{-}'+ "comment to fix highlight on wiki'
-syn region jinjaFoldElse
-      \ start="<%[+-]\?\s*\<else\>"
-      \ end="<%[+-]\?\s*\<endif\>"
-      \ fold transparent
-      \ keepend
-      \ contained containedin=jinjaFoldIfContainer
-      \ contains=TOP
-      \ skip=+"\%(\\"\|[^"]\)\{-}\%("\|$\)\|'[^']\{-}'+ "comment to fix highlight on wiki'
+
+hi def link jinjaTagBlock  CJinjaToken
+hi def link jinjaVarBlock  CJinjaToken
+hi def link jinjaStatement CJinjaKeyword
+hi def link jinjaFunction  CJinjaFunc
+hi def link jinjaTest      CJinjaFunc
+hi def link jinjaFilter    CJinjaFunc
+hi def link jinjaArgument  CJinjaToken
+hi def link jinjaTagError  Error
+hi def link jinjaVarError  Error
+hi def link jinjaError     Error
+hi def link jinjaComment   CJinjaComment
+hi def link jinjaComBlock  CJinjaComment
+hi def link jinjaTodo      Todo
 
 
 
+" hi jinjaTmpl ctermbg=Cyan guibg=Pink cterm=bold gui=bold
+" hi jinjaTmpl  cterm=bold gui=bold guibg=#CEFFD7
+hi jinjaTmpl  cterm=bold gui=bold guifg=#FFFFFF
 
+
+function! JinjaFold()
+    " Get the line for which Vim wants to know the folding level
+    let l:line = getline(v:lnum)
+
+    " <% for xxx ... %>, fold level add 1
+    if l:line =~ '<%[-+]\?\s*for'
+        return 'a1'
+    endif
+    if l:line =~ '<%[-+]\?\s*endfor'
+        return 's1'
+    endif
+
+    " <% if xxx %>, fold level add 1
+    if l:line =~ '<%[-+]\?\s*if'
+        return 'a1'
+    endif
+    if l:line =~ '<%[-+]\?\s*endif'
+        return 's1'
+    endif
+
+    " <% macro ... %> fold level add 1
+    if l:line =~ '<%[-+]\?\s*macro'
+        return 'a1'
+    endif
+    if l:line =~ '<%[-+]\?\s*endmacro'
+        return 's1'
+    endif
+
+    " <% block ... %> fold level add 1
+    if l:line =~ '<%[-+]\?\s*block'
+        return 'a1'
+    endif
+    if l:line =~ '<%[-+]\?\s*endblock'
+        return 's1'
+    endif
+
+
+    " use the foldlevel of the previous line
+    return '='
+endfunction
+
+setlocal fdm=expr
+setlocal foldexpr=JinjaFold()
 
 let b:current_syntax = "jinja"
-
-
 
