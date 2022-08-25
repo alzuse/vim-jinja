@@ -23,8 +23,8 @@ if exists('loaded_matchit')
   "   - "+": disable the lstrip_blocks (only at start)
   "   - "-": the whitespaces before or after that block will be removed
   let b:match_words = '<:>,' .
-        \ '<%[-+]\? *if *\w\+\>.\{-}%>:<%[-+]\? *elif *\w\+\>.\{-}%>:<%-\? *else *%>:<%-\? *endif *%>,' .
-        \ '<%[-+]\? *\%(end\)\@!\(\w\+\)\>.\{-}%>:<%-\? *end\1\>.\{-}%>,' .
+        \ '<%[-+]\?\s*if\s*\w\+\>.\{-}%>:<%[-+]\?\s*elif\s*\w\+\>.\{-}%>:<%-\?\s*else\s*%>:<%-\?\s*endif\s*%>,' .
+        \ '<%[-+]\?\s*\%(end\)\@!\(\w\+\)\>.\{-}%>:<%-\?\s*end\1\>.\{-}%>,' .
         \ ''
 endif
 
