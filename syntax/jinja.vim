@@ -93,14 +93,15 @@ syn region jinjaTmpl start="." end="." skip="<%\|\$\|#.{-}%\|\$\|#>"
 
 colo elflord
 
-hi CJinjaToken   guifg=#00C0FF gui=NONE cterm=NONE
-hi CJinjaKeyword guifg=#FFFF00 gui=NONE cterm=NONE
-hi CJinjaFunc    guifg=#5CCEC0 gui=NONE cterm=NONE
-hi CJinjaComment guifg=#808080 gui=NONE cterm=NONE
+hi CJinjaToken   guifg=#00C0FF gui=NONE   cterm=NONE
+hi CJinjaVar     guifg=#00E0A2 gui=bold   cterm=NONE
+hi CJinjaKeyword guifg=#FFFF00 gui=NONE   cterm=NONE
+hi CJinjaFunc    guifg=#5CCEC0 gui=NONE   cterm=NONE
+hi CJinjaComment guifg=#808080 gui=NONE   cterm=NONE
 
 
 hi def link jinjaTagBlock  CJinjaToken
-hi def link jinjaVarBlock  CJinjaToken
+hi def link jinjaVarBlock  CJinjaVar
 hi def link jinjaStatement CJinjaKeyword
 hi def link jinjaFunction  CJinjaFunc
 hi def link jinjaTest      CJinjaFunc
