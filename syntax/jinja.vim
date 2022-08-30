@@ -94,8 +94,8 @@ syn region jinjaTmpl start="." end="." skip="<%\|\$\|#.{-}%\|\$\|#>"
 colo elflord
 
 hi CJinjaToken   guifg=#00C0FF gui=NONE   cterm=NONE
-hi CJinjaVar     guifg=#00E0A2 gui=bold   cterm=NONE
-hi CJinjaKeyword guifg=#FFFF00 gui=NONE   cterm=NONE
+hi CJinjaVar     guifg=#FFD888 gui=bold   cterm=NONE
+hi CJinjaKeyword guifg=#00E075 gui=NONE   cterm=NONE
 hi CJinjaFunc    guifg=#5CCEC0 gui=NONE   cterm=NONE
 hi CJinjaComment guifg=#808080 gui=NONE   cterm=NONE
 
