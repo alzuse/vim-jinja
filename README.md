@@ -8,9 +8,10 @@ Jinja bundle for vim.
 1. full syntax support
 2. great indent support
 3. folding support
-4. `%` (matchit) block matching
-5. configurable delimiters
-6. colors follow your colorscheme
+4. `%` block matching, including tags that span lines
+5. background highlight of the block under the cursor
+6. configurable delimiters
+7. colors follow your colorscheme
 
 
 ## Jinja tag modification
@@ -68,6 +69,33 @@ Folding is enabled by default. To keep your own `foldmethod`:
 buffer, so typing, undoing and reindenting stay fast even in very large files;
 only an edit that changes the block tags triggers a rebuild.
 
+## Block highlight
+
+When the cursor is on a block statement tag (`<% for ... %>`, `<% if ... %>`,
+`<% else %>`, `<% endfor %>`, ...), the opener and the closer of that block get
+a background, so the extent of the block is visible. Only the tags are shaded:
+the text between them is rendered content and is left alone, and nothing is
+highlighted while the cursor is on that text. A tag that neither opens nor
+closes a block (`<% else %>`, `<% elif %>`) selects the `if` block around it.
+
+A tag may span lines (`<% if a` on one line, `and b %>` on the next); the
+whole tag is shaded across all the lines it covers.
+
+It uses the `ColorColumn` background by default, so it follows your
+colorscheme. To use another group:
+
+    hi link jinjaBlockHighlight Visual
+
+To disable it:
+
+    let g:jinja_block_highlight = 0
+
+The tag under the cursor is found by scanning backward for the block start;
+the matching tag is found by walking the tags around it with `searchpos()`
+once, then cached until the buffer changes or the cursor moves to another
+tag. Text that only looks like a tag, inside raw blocks, comments and
+strings, is ignored.
+
 ## Requirements
 
 Vim 7.3.694 or newer. With `matchbufline()` (Vim 9.1.0009 or newer) folding
@@ -83,8 +111,20 @@ for example:
 
     packadd matchit
 
-HTML tags are matched too, unless one of your delimiters starts with `<`.
-With the default `<%`, matchit would mistake the `<` for an HTML tag opener.
+A tag that spans lines (`<% if a` on one line, `and b %>` on the next) is
+matched as well: on any line of such a tag `%` jumps to the matching tag.
+
+Everywhere else `%` keeps its previous behavior, so matchit, vim-matchup or
+Vim's builtin matching still handle HTML tags and parentheses. To turn the
+mapping off:
+
+    let g:jinja_percent_mapping = 0
+
+`b:match_words` is set for matchit and vim-matchup as well.
+
+HTML tags are matched by matchit/matchup too, unless one of your delimiters
+starts with `<`. With the default `<%`, matchit would mistake the `<` for an
+HTML tag opener.
 
 ## Colors
 

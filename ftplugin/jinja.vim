@@ -20,12 +20,20 @@ let s:undo = 'setlocal comments< commentstring< formatoptions<'
 " Setup matchit (vim-matchup reads the same b:match_words variables, so set
 " them even if matchit is loaded later).
 let b:match_ignorecase = 0
-let b:match_skip = 's:Comment\|s:jinjaComBlock\|s:jinjaArgument\|s:String'
+let b:match_skip = 's:Comment\|String\|jinjaComBlock\|jinjaArgument\|jinjaRaw'
 
 let s:bs = escape(s:delims.block_start, '\.*$^~[]\')
 let s:be = escape(s:delims.block_end, '\.*$^~[]\')
 let s:bt = s:bs . '[-+]\?\s*'
-let s:bc = '.\{-}[-+]\?' . s:be
+" The tag body up to the end delimiter is optional and matched on the same
+" line only: a tag like "<% if a" / "and b %>" is then a delimiter for % as
+" well, while matchit/matchup still get a single-line match (they match the
+" delimiter against one line).
+let s:bc = '\%([^\n]\{-}[-+]\?' . s:be . '\)\?'
+
+" Block tags that span lines. Used by folding and by block highlighting.
+let s:block_names = ['for', 'if', 'block', 'macro', 'filter', 'with',
+      \ 'autoescape', 'call', 'trans']
 
 " Match HTML tags too, unless a Jinja delimiter starts with "<": then the
 " "<" of e.g. "<%" would be mistaken for an HTML tag opener by matchit.
@@ -48,10 +56,9 @@ endif
 "   - "-": the whitespaces before or after that block will be removed
 let b:match_words =
       \ s:html_pair .
-      \ s:bt . 'if\>' . s:bc . ':' .
-      \ s:bt . 'elif\>' . s:bc . ':' .
-      \ s:bt . 'else\>' . s:bc . ':' .
-      \ s:bt . 'endif\>' . s:bc . ',' .
+      \ s:bt . '\%(if\|for\)\>' . s:bc . ':' .
+      \ s:bt . '\%(elif\|else\)\>' . s:bc . ':' .
+      \ s:bt . '\%(endif\|endfor\)\>' . s:bc . ',' .
       \ s:bt . '\%(end\)\@!\(\w\+\)\>' . s:bc . ':' .
       \ s:bt . 'end\1\>' . s:bc
 let s:undo .= '|unlet! b:match_words b:match_skip b:match_ignorecase'
@@ -77,8 +84,7 @@ let s:undo .= '|unlet! b:match_words b:match_skip b:match_ignorecase'
 " cached levels.
 if get(g:, 'jinja_folding', 1)
   let s:tag_start = s:bs . '[-+]\?\s*'
-  let s:fold_names = ['for', 'if', 'block', 'macro', 'filter', 'with',
-        \ 'autoescape', 'call', 'trans']
+  let s:fold_names = s:block_names
   let s:fold_open = {}
   let s:fold_close = {}
   for s:name in s:fold_names
@@ -86,16 +92,21 @@ if get(g:, 'jinja_folding', 1)
     let s:fold_close['end' . s:name] = 1
   endfor
   unlet s:name
+  let s:comment_open = escape(s:delims.comment_start, '\.*$^~[]')
+  let s:comment_close = escape(s:delims.comment_end, '\.*$^~[]')
   let b:jinja_fold_pats = {
         \ 'bs': s:delims.block_start,
-        \ 'find': '\C' . s:tag_start . '\zs\%(' . join(s:fold_names, '\|')
+        \ 'comment_start': s:delims.comment_start,
+        \ 'comment_end': s:delims.comment_end,
+        \ 'find': '\C\%(' . s:comment_open . '\|' . s:comment_close . '\)\|'
+        \         . s:tag_start . '\zs\%(' . join(s:fold_names, '\|')
         \         . '\|raw\|end\w\+\)\>',
         \ 'tag': s:tag_start . '\a',
         \ 'open': s:tag_start . '\%(' . join(s:fold_names + ['raw'], '\|') . '\)\>',
         \ 'close': s:tag_start . 'end\w\+\>',
         \ }
   let b:jinja_fold_cache = {
-        \ 'tick': -1, 'levels': [], 'tail': 0, 'sig': {},
+        \ 'tick': -1, 'levels': [], 'tail': 0, 'sig': {}, 'fake': {},
         \ 'chg_any': 0, 'chg_added': 0, 'chg_lo': 0, 'chg_hi': 0,
         \ }
 
@@ -132,11 +143,63 @@ if get(g:, 'jinja_folding', 1)
       return '='
     endfunction
 
+    " Records where a tag-looking match inside raw or a comment starts. The
+    " fold match starts at the name; back up to the block start delimiter.
+    function! s:FakeTag(fake, lnum, byteidx, name) abort
+      if a:name ==# b:jinja_fold_pats.comment_start
+            \ || a:name ==# b:jinja_fold_pats.comment_end
+        return
+      endif
+      let l:pos = strridx(getline(a:lnum), b:jinja_fold_pats.bs, a:byteidx)
+      if l:pos >= 0
+        if has_key(a:fake, a:lnum)
+          call add(a:fake[a:lnum], l:pos)
+        else
+          let a:fake[a:lnum] = [l:pos]
+        endif
+      endif
+    endfunction
+
+    " Every match inside raw or a comment, by line. Without syntax
+    " highlighting this is the only way to tell such text from a real tag, so
+    " it is only collected when the syntax is off: the pass is not cheap, and
+    " normally comments and raw bodies are recognized from the syntax.
+    function! s:FakeTags(matches) abort
+      let l:fake = {}
+      let l:raw = 0
+      let l:comment = 0
+      for l:m in a:matches
+        let l:name = l:m.text
+        if l:raw
+          if l:name ==# 'endraw'
+            let l:raw = 0
+          else
+            call s:FakeTag(l:fake, l:m.lnum, l:m.byteidx, l:name)
+          endif
+        elseif l:comment
+          if l:name ==# b:jinja_fold_pats.comment_end
+            let l:comment = 0
+          else
+            call s:FakeTag(l:fake, l:m.lnum, l:m.byteidx, l:name)
+          endif
+        elseif l:name ==# b:jinja_fold_pats.comment_start
+          let l:comment = 1
+        elseif l:name ==# 'raw'
+          let l:raw = 1
+        endif
+      endfor
+      return l:fake
+    endfunction
+
     function! s:FoldLevels() abort
       let l:matches = matchbufline(bufnr('%'), b:jinja_fold_pats.find, 1, '$')
       let l:deltas = {}
       let l:sig = {}
+      " Tag-looking text inside raw and comments, by line, for highlighting:
+      " it is not a real tag and must not be matched as one.
+      let l:fake = {}
       let l:raw = 0
+      let l:comment = 0
       let l:i = 0
       let l:n = len(l:matches)
       while l:i < l:n
@@ -148,18 +211,20 @@ if get(g:, 'jinja_folding', 1)
           let l:name = l:matches[l:i].text
           call add(l:names, l:name)
           let l:i += 1
-          if l:name ==# 'raw'
-            if !l:raw
-              let l:raw = 1
-              let l:opens += 1
-            endif
-          elseif l:name ==# 'endraw'
-            if l:raw
+          if l:raw
+            if l:name ==# 'endraw'
               let l:raw = 0
               let l:closes += 1
             endif
-          elseif l:raw
-            " Tag-looking text inside {% raw %} is literal.
+          elseif l:comment
+            if l:name ==# b:jinja_fold_pats.comment_end
+              let l:comment = 0
+            endif
+          elseif l:name ==# b:jinja_fold_pats.comment_start
+            let l:comment = 1
+          elseif l:name ==# 'raw'
+            let l:raw = 1
+            let l:opens += 1
           elseif has_key(s:fold_open, l:name)
             let l:opens += 1
           elseif has_key(s:fold_close, l:name)
@@ -181,6 +246,9 @@ if get(g:, 'jinja_folding', 1)
           let l:deltas[l:lnum + 1] = get(l:deltas, l:lnum + 1, 0) - l:closes
         endif
       endwhile
+      if get(g:, 'jinja_block_highlight', 1) && !exists('b:current_syntax')
+        let l:fake = s:FakeTags(l:matches)
+      endif
 
       " Expand the deltas to one level per line. repeat() and extend() run in C.
       let l:levels = []
@@ -206,6 +274,7 @@ if get(g:, 'jinja_folding', 1)
       let l:c.levels = l:levels
       let l:c.tail = empty(l:levels) ? l:lvl : l:levels[-1]
       let l:c.sig = l:sig
+      let l:c.fake = l:fake
       let l:c.chg_any = 0
       let l:c.chg_added = 0
       let l:c.chg_lo = 0
@@ -289,12 +358,90 @@ if get(g:, 'jinja_folding', 1)
   setlocal foldmethod=expr
   if exists('*matchbufline')
     setlocal foldexpr=JinjaFoldLevel(v:lnum)
-    let s:fold_listener = listener_add(function('s:FoldListen'), bufnr('%'), v:true)
-    let s:undo .= '|call listener_remove(' . s:fold_listener . ')'
+    if exists('*listener_add')
+      let s:fold_listener = listener_add(function('s:FoldListen'), bufnr('%'), v:true)
+      let s:undo .= '|call listener_remove(' . s:fold_listener . ')'
+    endif
   else
     setlocal foldexpr=JinjaFoldLevelRel(v:lnum)
   endif
   let s:undo .= '|setlocal foldmethod< foldexpr<|unlet! b:jinja_fold_pats b:jinja_fold_cache'
+endif
+
+" Block tag parsing, shared by the block highlight and by `%`. Tags may span
+" lines: the tag body is matched with \_.{-}, so a tag like
+"   <% if a
+"      and b %>
+" is a single tag.
+let s:bopen = join(s:block_names + ['raw'], '\|')
+let s:bend = map(copy(s:block_names + ['raw']), '"end" . v:val')
+let s:tagbody = '\%(\_.\)\{-}[-+]\?' . s:be
+let b:jinja_block_kind = {}
+for s:name in s:block_names + ['raw']
+  let b:jinja_block_kind[s:name] = 'open'
+  let b:jinja_block_kind['end' . s:name] = 'close'
+endfor
+unlet s:name
+let b:jinja_block_kind['else'] = 'mid'
+let b:jinja_block_kind['elif'] = 'mid'
+let b:jinja_block_pats = {
+      \ 'start': '\V' . escape(s:delims.block_start, '\'),
+      \ 'end': '\V' . escape(s:delims.block_end, '\'),
+      \ 'endlen': strlen(s:delims.block_end),
+      \ 'name': '\C' . s:bt . '\zs\w\+',
+      \ 'all': '\C' . s:bt . '\%(' . s:bopen . '\|else\|elif\|'
+      \        . join(s:bend, '\|') . '\)\>' . s:tagbody,
+      \ }
+let b:jinja_block_skip = 'jinja#tag_skip()'
+let s:undo .= '|unlet! b:jinja_block_pats b:jinja_block_skip b:jinja_block_kind b:jinja_hl_cache'
+
+" Background highlight of the block tags around the cursor. Set
+" g:jinja_block_highlight to 0 in vimrc to disable.
+"
+" Only block statements are highlighted: when the cursor is on one of their
+" tags (for, if, else, endfor, ...), the opener and the closer of that block
+" get a background. The text between the tags is rendered content and is left
+" alone, and the highlight is cleared when the cursor is on that text. Tags
+" may span lines; the tag under the cursor is found by scanning backward for
+" its block start, and the matching tag is found by walking the tags around it
+" with searchpos() once, cached until the buffer changes or the cursor moves
+" to another tag.
+if get(g:, 'jinja_block_highlight', 1)
+  hi def link jinjaBlockHighlight ColorColumn
+  augroup jinja_block_highlight
+    autocmd! * <buffer>
+    " A colorscheme reload clears every highlight group, including this link.
+    autocmd ColorScheme <buffer> hi def link jinjaBlockHighlight ColorColumn
+    autocmd CursorMoved,CursorMovedI,TextChanged,TextChangedI,InsertLeave <buffer> call jinja#block_highlight()
+    autocmd BufWinEnter,WinEnter <buffer> call jinja#block_highlight(1)
+    autocmd BufLeave,WinLeave <buffer> call jinja#block_clear()
+  augroup END
+  call jinja#block_highlight(1)
+  let s:undo .= '|call jinja#block_clear_all()'
+  let s:undo .= '|execute "autocmd! jinja_block_highlight * <buffer>"'
+endif
+
+" `%` on a block tag jumps to the next tag of the block, or to the opener
+" from a closer. Anywhere else the previous `%` behavior is kept. Set
+" g:jinja_percent_mapping to 0 in vimrc to disable.
+if get(g:, 'jinja_percent_mapping', 1)
+  function! s:PercentJump() abort
+    if v:count == 0 && jinja#jump()
+      return
+    endif
+    if exists('*matchup#motion#find_matching_pair')
+          \ && get(g:, 'matchup_motion_enabled', 1)
+      call matchup#motion#find_matching_pair(0, 1)
+    elseif exists('*matchit#Match_wrapper')
+      call matchit#Match_wrapper('', 1, 'n')
+    elseif v:count > 0
+      execute 'normal! ' . v:count . '%'
+    else
+      normal! %
+    endif
+  endfunction
+  nnoremap <buffer> <silent> % :<C-U>call <SID>PercentJump()<CR>
+  let s:undo .= '|silent! nunmap <buffer> %'
 endif
 
 if exists('b:undo_ftplugin')

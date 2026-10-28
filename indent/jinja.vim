@@ -45,7 +45,20 @@ function! s:TagInRaw(lnum, line, pats) abort
     return 0
   endif
   let l:col = match(a:line, a:pats.tag)
-  return l:col >= 0 && synIDattr(synID(a:lnum, l:col + 1, 1), 'name') ==# 'jinjaRaw'
+  if l:col < 0
+    return 0
+  endif
+  let l:name = synIDattr(synID(a:lnum, l:col + 1, 1), 'name')
+  return l:name ==# 'jinjaRaw' || l:name ==# 'jinjaComBlock'
+endfunction
+
+" True when a:lnum is inside a {% raw %} body. A raw body is literal text, so
+" "=" must leave its indentation alone.
+function! s:LineInRaw(lnum) abort
+  if !exists('b:current_syntax')
+    return 0
+  endif
+  return synIDattr(synID(a:lnum, 1, 1), 'name') ==# 'jinjaRaw'
 endfunction
 
 " Line number of the raw opener enclosing a:lnum, or 0. Only called for an
@@ -87,15 +100,18 @@ function! GetJinjaIndent()
 
   " Everything inside a raw block is literal text: keep the indent, and align
   " the endraw line with its opener.
+  if l:cur_has && l:cur =~# l:pats.raw_close
+    let l:open_lnum = s:RawOpener(l:plnum, l:pats)
+    if l:open_lnum > 0
+      return indent(l:open_lnum)
+    endif
+  endif
+  if l:cur !~# '^\s*$' && s:LineInRaw(v:lnum)
+    return indent(v:lnum)
+  endif
   if l:cur_has
     if l:cur =~# l:pats.tag && s:TagInRaw(v:lnum, l:cur, l:pats)
       return l:ind
-    endif
-    if l:cur =~# l:pats.raw_close
-      let l:open_lnum = s:RawOpener(l:plnum, l:pats)
-      if l:open_lnum > 0
-        return indent(l:open_lnum)
-      endif
     endif
   endif
   if l:pnb_has

@@ -33,7 +33,7 @@ syntax sync fromstart
 
 " jinja template built-in tags and parameters
 " 'comment' doesn't appear here because it gets special treatment
-syn keyword jinjaStatement contained if else elif endif is not
+syn keyword jinjaStatement contained if else elif endif is not and or
 syn keyword jinjaStatement contained for in recursive endfor
 syn keyword jinjaStatement contained raw endraw
 syn keyword jinjaStatement contained block endblock extends super scoped
@@ -85,20 +85,20 @@ let s:var_error = escape(s:delims.block_start, '/\') . '\|' .
 execute 'syn match jinjaTagError contained /\V' . s:tag_error . '/'
 execute 'syn match jinjaVarError contained /\V' . s:var_error . '/'
 
-syn cluster jinjaBlocks add=jinjaTagBlock,jinjaVarBlock,jinjaComBlock,jinjaRaw
+syn cluster jinjaBlocks add=jinjaTagBlock,jinjaVarBlock,jinjaComBlock,jinjaRaw,jinjaArgument
 
 " jinja template tag and variable blocks
 execute 'syn region jinjaTagBlock start=/\V' . escape(s:delims.block_start, '/\') .
       \ '/ end=/\V' . escape(s:delims.block_end, '/\') .
       \ '/ contains=jinjaStatement,jinjaFilter,jinjaFunction,jinjaTest,jinjaArgument,jinjaTagError' .
-      \ ' display containedin=ALLBUT,@jinjaBlocks'
+      \ ' containedin=ALLBUT,@jinjaBlocks'
 execute 'syn region jinjaVarBlock start=/\V' . escape(s:delims.variable_start, '/\') .
       \ '/ end=/\V' . escape(s:delims.variable_end, '/\') .
       \ '/ contains=jinjaStatement,jinjaFilter,jinjaFunction,jinjaTest,jinjaArgument,jinjaVarError' .
-      \ ' display containedin=ALLBUT,@jinjaBlocks'
+      \ ' containedin=ALLBUT,@jinjaBlocks'
 execute 'syn region jinjaComBlock start=/\V' . escape(s:delims.comment_start, '/\') .
       \ '/ end=/\V' . escape(s:delims.comment_end, '/\') .
-      \ '/ contains=jinjaTodo display containedin=ALLBUT,@jinjaBlocks'
+      \ '/ contains=jinjaTodo containedin=ALLBUT,@jinjaBlocks'
 
 " The body of {% raw %}...{% endraw %} is plain text. Defined last so it
 " wins over the tag block starting at the same position. The delimiters keep
@@ -109,7 +109,7 @@ let s:raw_close = escape(s:delims.block_start, '\.*$^~[]/') . '[-+]\?\s*endraw\s
       \ escape(s:delims.block_end, '\.*$^~[]/')
 execute 'syn region jinjaRaw matchgroup=jinjaTagBlock start=/' . s:raw_open .
       \ '/ end=/' . s:raw_close .
-      \ '/ contains=NONE display containedin=ALLBUT,@jinjaBlocks'
+      \ '/ contains=NONE containedin=ALLBUT,@jinjaBlocks'
 
 " Follow the active colorscheme. Links use "hi def link" so a group can be
 " overridden from vimrc, e.g.:
