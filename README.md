@@ -6,7 +6,7 @@ Jinja bundle for vim.
 ## Feature
 
 1. full syntax support
-2. great indent support
+2. great indent support, with closing tags lined up with their opener
 3. folding support
 4. `%` block matching, including tags that span lines
 5. background highlight of the block under the cursor
@@ -68,6 +68,13 @@ Folding is enabled by default. To keep your own `foldmethod`:
 `foldmethod=expr` with absolute levels is used, and the levels are cached per
 buffer, so typing, undoing and reindenting stay fast even in very large files;
 only an edit that changes the block tags triggers a rebuild.
+
+When a line becomes nothing but a block closing tag — the `%>` typed last, or
+`endif` filled into a `<% %>` typed first — the line is lined up with the tag
+that opened the block, so it does not stay one level too deep under an
+indented body. To disable it:
+
+    let g:jinja_close_indent = 0
 
 ## Block highlight
 

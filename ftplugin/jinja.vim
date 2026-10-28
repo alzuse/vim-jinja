@@ -368,31 +368,8 @@ if get(g:, 'jinja_folding', 1)
   let s:undo .= '|setlocal foldmethod< foldexpr<|unlet! b:jinja_fold_pats b:jinja_fold_cache'
 endif
 
-" Block tag parsing, shared by the block highlight and by `%`. Tags may span
-" lines: the tag body is matched with \_.{-}, so a tag like
-"   <% if a
-"      and b %>
-" is a single tag.
-let s:bopen = join(s:block_names + ['raw'], '\|')
-let s:bend = map(copy(s:block_names + ['raw']), '"end" . v:val')
-let s:tagbody = '\%(\_.\)\{-}[-+]\?' . s:be
-let b:jinja_block_kind = {}
-for s:name in s:block_names + ['raw']
-  let b:jinja_block_kind[s:name] = 'open'
-  let b:jinja_block_kind['end' . s:name] = 'close'
-endfor
-unlet s:name
-let b:jinja_block_kind['else'] = 'mid'
-let b:jinja_block_kind['elif'] = 'mid'
-let b:jinja_block_pats = {
-      \ 'start': '\V' . escape(s:delims.block_start, '\'),
-      \ 'end': '\V' . escape(s:delims.block_end, '\'),
-      \ 'endlen': strlen(s:delims.block_end),
-      \ 'name': '\C' . s:bt . '\zs\w\+',
-      \ 'all': '\C' . s:bt . '\%(' . s:bopen . '\|else\|elif\|'
-      \        . join(s:bend, '\|') . '\)\>' . s:tagbody,
-      \ }
-let b:jinja_block_skip = 'jinja#tag_skip()'
+" Block tag parsing, shared by the block highlight, `%` and the indent file.
+call jinja#block_init()
 let s:undo .= '|unlet! b:jinja_block_pats b:jinja_block_skip b:jinja_block_kind b:jinja_hl_cache'
 
 " Background highlight of the block tags around the cursor. Set

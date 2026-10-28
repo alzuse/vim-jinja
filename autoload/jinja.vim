@@ -15,6 +15,37 @@ function! jinja#delims() abort
         \ }
 endfunction
 
+" Builds the buffer-local block tag patterns, shared by the block highlight,
+" `%` and the indent file. Tags may span lines: the body is matched with
+" \_.{-}, so "<% if a" / "and b %>" is a single tag. Idempotent.
+function! jinja#block_init() abort
+  if exists('b:jinja_block_pats')
+    return
+  endif
+  let l:d = jinja#delims()
+  let l:be = escape(l:d.block_end, '\.*$^~[]\')
+  let l:bt = escape(l:d.block_start, '\.*$^~[]\') . '[-+]\?\s*'
+  let l:names = ['for', 'if', 'block', 'macro', 'filter', 'with',
+        \ 'autoescape', 'call', 'trans', 'raw']
+  let b:jinja_block_kind = {}
+  for l:name in l:names
+    let b:jinja_block_kind[l:name] = 'open'
+    let b:jinja_block_kind['end' . l:name] = 'close'
+  endfor
+  let b:jinja_block_kind['else'] = 'mid'
+  let b:jinja_block_kind['elif'] = 'mid'
+  let b:jinja_block_pats = {
+        \ 'start': '\V' . escape(l:d.block_start, '\'),
+        \ 'end': '\V' . escape(l:d.block_end, '\'),
+        \ 'endlen': strlen(l:d.block_end),
+        \ 'name': '\C' . l:bt . '\zs\w\+',
+        \ 'all': '\C' . l:bt . '\%(' . join(l:names, '\|') . '\|else\|elif\|'
+        \        . join(map(copy(l:names), '"end" . v:val'), '\|') . '\)\>'
+        \        . '\%(\_.\)\{-}[-+]\?' . l:be,
+        \ }
+  let b:jinja_block_skip = 'jinja#tag_skip()'
+endfunction
+
 " The tag that starts at a:lnum/a:col (the first byte of the block start
 " delimiter), or {} when the text there is not a block statement. The Dict
 " holds the byte column of the delimiter start (sl/sc) and the column just
@@ -236,6 +267,54 @@ function! jinja#jump() abort
     " Forward jumps land on the last character of the tag, like vim-matchup.
     call cursor(l:t.el, l:t.ec - 1)
   endif
+  return 1
+endfunction
+
+" Called from TextChangedI in the indent file. When the line just became
+" nothing but a block closing tag, line it up with the tag that opened the
+" block: typing "%>" then undoes the indent the body left on the line. Only a
+" tag that starts the line is touched. The name counts as well as the end
+" delimiter, so a tag whose delimiters were typed first ("<% %>") is lined up
+" as soon as "endif" fills it in. Returns 1 when the line was reindented.
+function! jinja#align_close() abort
+  if !get(g:, 'jinja_close_indent', 1)
+    return 0
+  endif
+  let l:lnum = line('.')
+  let l:line = getline(l:lnum)
+  let l:d = jinja#delims()
+  if stridx(l:line, l:d.block_start) < 0
+    return 0
+  endif
+  call jinja#block_init()
+  let l:p = b:jinja_block_pats
+  if l:line !~# '^\s*' . l:p.start
+    return 0
+  endif
+  let l:col = match(l:line, '\S') + 1
+  let l:t = s:TagFromStart(l:lnum, l:col)
+  if empty(l:t) || l:t.kind !=# 'close' || s:InSkip(l:lnum, l:col)
+    return 0
+  endif
+  " The tag must end on this line and nothing but whitespace may follow it.
+  if l:t.el != l:lnum || strpart(l:line, l:t.ec - 1) =~# '\S'
+    return 0
+  endif
+  let l:open = s:FindOpen(l:t)
+  if empty(l:open)
+    return 0
+  endif
+  let l:old = matchstr(l:line, '^\s*')
+  let l:new = matchstr(getline(l:open.sl), '^\s*')
+  if l:new ==# l:old
+    return 0
+  endif
+  let l:pos = getcurpos()
+  " The reindent joins the insert so one undo still removes both.
+  silent! undojoin
+  call setline(l:lnum, l:new . strpart(l:line, strlen(l:old)))
+  let l:pos[2] += strlen(l:new) - strlen(l:old)
+  call setpos('.', l:pos)
   return 1
 endfunction
 

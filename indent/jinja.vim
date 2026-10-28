@@ -32,6 +32,21 @@ let b:jinja_indent_pats = {
       \ 'block_mid': s:tag_start . s:midtags . s:tag_tail,
       \ }
 
+" A closing block tag usually starts on a line indented for the body, and
+" nothing re-evaluates the line when the tag is completed. As soon as the line
+" becomes nothing but a closing tag (the end delimiter typed last, or the name
+" filled into delimiters typed first), line it up with the opener of its block.
+" InsertLeave is the fallback for keys that arrive as typeahead (fast typing, a
+" paste), where TextChangedI is not triggered. Set g:jinja_close_indent to 0 in
+" vimrc to disable.
+if get(g:, 'jinja_close_indent', 1) && exists('##TextChangedI')
+  augroup jinja_close_indent
+    autocmd! * <buffer>
+    autocmd TextChangedI,InsertLeave <buffer> call jinja#align_close()
+  augroup END
+  let b:undo_indent .= '|execute "autocmd! jinja_close_indent * <buffer>"'
+endif
+
 " Only define the functions once.
 if exists("*GetJinjaIndent")
   finish
