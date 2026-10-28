@@ -29,7 +29,12 @@ let s:bt = s:bs . '[-+]\?\s*'
 " line only: a tag like "<% if a" / "and b %>" is then a delimiter for % as
 " well, while matchit/matchup still get a single-line match (they match the
 " delimiter against one line).
-let s:bc = '\%([^\n]\{-}[-+]\?' . s:be . '\)\?'
+"
+" The body cannot contain the end delimiter. A non-greedy body would let
+" vim-matchup's cursor lookup, which requires the match to end after the
+" cursor, swallow "<% if x %> text <% endif %>" as one tag: the text between
+" the tags of a same-line block would then be highlighted.
+let s:bc = '\%(\%(\%(' . s:be . '\)\@![^\n]\)*[-+]\?' . s:be . '\)\?'
 
 " Block tags that span lines. Used by folding and by block highlighting.
 let s:block_names = ['for', 'if', 'block', 'macro', 'filter', 'with',
@@ -377,18 +382,19 @@ let s:undo .= '|unlet! b:jinja_block_pats b:jinja_block_skip b:jinja_block_kind 
 "
 " Only block statements are highlighted: when the cursor is on one of their
 " tags (for, if, else, endfor, ...), the opener and the closer of that block
-" get a background. The text between the tags is rendered content and is left
-" alone, and the highlight is cleared when the cursor is on that text. Tags
-" may span lines; the tag under the cursor is found by scanning backward for
-" its block start, and the matching tag is found by walking the tags around it
-" with searchpos() once, cached until the buffer changes or the cursor moves
-" to another tag.
+" get a background. The tag under the cursor uses another one, so it stands
+" out, and the else/elif tags of the block a third. The text between the tags
+" is rendered content and is left alone, and the highlight is cleared when the
+" cursor is on that text. Tags may span lines; the tag under the cursor is
+" found by scanning backward for its block start, and the matching tag is
+" found by walking the tags around it with searchpos() once, cached until the
+" buffer changes or the cursor moves to another tag.
 if get(g:, 'jinja_block_highlight', 1)
-  hi def link jinjaBlockHighlight ColorColumn
+  " The groups themselves are global and re-applied on a colorscheme or
+  " 'background' change by autoload/jinja.vim; see jinja#block_colors().
+  call jinja#block_colors()
   augroup jinja_block_highlight
     autocmd! * <buffer>
-    " A colorscheme reload clears every highlight group, including this link.
-    autocmd ColorScheme <buffer> hi def link jinjaBlockHighlight ColorColumn
     autocmd CursorMoved,CursorMovedI,TextChanged,TextChangedI,InsertLeave <buffer> call jinja#block_highlight()
     autocmd BufWinEnter,WinEnter <buffer> call jinja#block_highlight(1)
     autocmd BufLeave,WinLeave <buffer> call jinja#block_clear()

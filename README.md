@@ -9,7 +9,8 @@ Jinja bundle for vim.
 2. great indent support, with closing tags lined up with their opener
 3. folding support
 4. `%` block matching, including tags that span lines
-5. background highlight of the block under the cursor
+5. background highlight of the block under the cursor, with the tag under the
+   cursor standing out
 6. configurable delimiters
 7. colors follow your colorscheme
 
@@ -88,10 +89,33 @@ closes a block (`<% else %>`, `<% elif %>`) selects the `if` block around it.
 A tag may span lines (`<% if a` on one line, `and b %>` on the next); the
 whole tag is shaded across all the lines it covers.
 
-It uses the `ColorColumn` background by default, so it follows your
-colorscheme. To use another group:
+Each part borrows its background from a standard highlight group, so the three
+shades stay apart and remain readable when Vim switches between the default
+light and dark themes:
 
-    hi link jinjaBlockHighlight Visual
+- the opener and the closer use the `ColorColumn` background;
+- the other `else`/`elif` tags of the block use `CursorColumn`;
+- the tag under the cursor uses `MatchParen`, so it stands out.
+
+Only backgrounds are set, so the syntax colors of the tag text remain. The
+colors follow the colorscheme and 'background', and are applied again after a
+`:colorscheme` reload or a `:set background=...`.
+
+To use other colors, set `g:jinja_block_highlight_colors` in your vimrc. A
+value is either the name of a group whose background is copied, or `hi`
+arguments for the group itself:
+
+    let g:jinja_block_highlight_colors = {
+          \ 'cur': 'Search',
+          \ 'mid': 'ctermbg=240 guibg=#3a3a3a',
+          \ 'pair': 'Visual',
+          \ }
+
+The keys are `cur` (group `jinjaBlockHighlightCur`), `mid`
+(`jinjaBlockHighlightMid`) and `pair` (`jinjaBlockHighlight`); omit a key to
+keep its default. To apply a change without reloading the buffer:
+
+    :call jinja#block_colors()
 
 To disable it:
 
@@ -135,8 +159,8 @@ HTML tag opener.
 
 ## Colors
 
-No colorscheme is forced and no colors are hard-coded: the Jinja groups are
-linked to the standard `PreProc`, `Statement`, `Function`, `Type`,
+No colorscheme is forced and no colors are hard-coded: the Jinja syntax
+groups are linked to the standard `PreProc`, `Statement`, `Function`, `Type`,
 `Identifier`, `Constant`, `Comment`, `Todo` and `Error` groups, so they follow
 whatever colorscheme is active.
 

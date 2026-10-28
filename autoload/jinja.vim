@@ -138,6 +138,41 @@ function! s:ScanForward(tag, mids) abort
   return l:found
 endfunction
 
+" The else/elif tags between the opener a:open and the closer a:close, at the
+" level of the block (nested blocks are skipped).
+function! s:ScanMids(open, close) abort
+  let l:p = b:jinja_block_pats
+  let l:skip = b:jinja_block_skip
+  let l:pos = getcurpos()
+  let l:depth = 0
+  let l:mids = []
+  call cursor(a:open.el, a:open.ec)
+  while 1
+    let [l:ml, l:mc] = searchpos(l:p.all, 'cnW', 0, 0, l:skip)
+    if l:ml == 0
+      break
+    endif
+    let l:t = s:TagFromStart(l:ml, l:mc)
+    if empty(l:t)
+      call cursor(l:ml, l:mc + 1)
+      continue
+    endif
+    if l:t.sl == a:close.sl && l:t.sc == a:close.sc
+      break
+    endif
+    call cursor(l:t.el, l:t.ec)
+    if l:t.kind ==# 'open'
+      let l:depth += 1
+    elseif l:t.kind ==# 'close'
+      let l:depth -= 1
+    elseif l:depth == 0
+      call add(l:mids, l:t)
+    endif
+  endwhile
+  call setpos('.', l:pos)
+  return l:mids
+endfunction
+
 " Scans backward from the start of a:tag for the opener of its block.
 function! s:FindOpen(tag) abort
   let l:p = b:jinja_block_pats
@@ -169,18 +204,20 @@ function! s:FindOpen(tag) abort
   return l:found
 endfunction
 
-" The opener and closer of the block the cursor is on, or []. An else/elif
-" selects the if block around it. Cached until the buffer changes or the
-" cursor moves to another tag.
+" The tag under the cursor, the opener/closer of its block and the else/elif
+" tags between them, as a Dict, or {} when the cursor is not on a block tag.
+" An else/elif selects the if block around it; 'tags' is empty when no pair
+" was found. Cached until the buffer changes or the cursor moves to another
+" tag.
 function! s:BlockTags() abort
   let l:cur = s:TagAtCursor()
   if empty(l:cur)
-    return []
+    return {}
   endif
   let l:key = l:cur.sl . ':' . l:cur.sc
   let l:c = get(b:, 'jinja_hl_cache', {})
   if get(l:c, 'tick', -1) == b:changedtick && get(l:c, 'key', '') ==# l:key
-    return l:c.tags
+    return l:c
   endif
   if l:cur.kind ==# 'close'
     let l:open = s:FindOpen(l:cur)
@@ -190,8 +227,10 @@ function! s:BlockTags() abort
     let l:close = s:ScanForward(l:cur, 0)
   endif
   let l:tags = empty(l:open) || empty(l:close) ? [] : [l:open, l:close]
-  let b:jinja_hl_cache = {'tick': b:changedtick, 'key': l:key, 'tags': l:tags}
-  return l:tags
+  let l:mids = empty(l:tags) ? [] : s:ScanMids(l:open, l:close)
+  let b:jinja_hl_cache = {'tick': b:changedtick, 'key': l:key,
+        \ 'cur': l:cur, 'tags': l:tags, 'mids': l:mids}
+  return b:jinja_hl_cache
 endfunction
 
 " matchadd() patterns covering a:tag. The column atom only constrains where a
@@ -318,6 +357,11 @@ function! jinja#align_close() abort
   return 1
 endfunction
 
+" The tag under the cursor gets a distinct background (jinjaBlockHighlightCur),
+" the opener and closer of its block the usual one (jinjaBlockHighlight), and
+" the other else/elif tags of the block a third (jinjaBlockHighlightMid); see
+" jinja#block_colors(). Only backgrounds are set, so the syntax colors of the
+" tag text stay visible.
 function! jinja#block_highlight(...) abort
   if !get(g:, 'jinja_block_highlight', 1) || !exists('b:jinja_block_pats')
     call jinja#block_clear()
@@ -326,22 +370,53 @@ function! jinja#block_highlight(...) abort
   if a:0 && a:1
     call jinja#block_clear()
   endif
-  let l:tags = s:BlockTags()
-  if l:tags ==# get(w:, 'jinja_block_tags', [])
+  let l:b = s:BlockTags()
+  let l:tags = get(l:b, 'tags', [])
+  if empty(l:tags)
+    if exists('w:jinja_block_state')
+      call jinja#block_clear()
+    endif
+    return
+  endif
+  let l:cur = l:b.cur
+  let l:mids = get(l:b, 'mids', [])
+  " Extents in the window state make CursorMoved cheap: moving inside the same
+  " tag, or to a tag of the same block, leaves the matches in place.
+  let l:state = [[l:cur.sl, l:cur.sc, l:cur.el, l:cur.ec]]
+  for l:t in l:tags + l:mids
+    call add(l:state, [l:t.sl, l:t.sc, l:t.el, l:t.ec])
+  endfor
+  if l:state ==# get(w:, 'jinja_block_state', [])
     return
   endif
   call jinja#block_clear()
-  if empty(l:tags)
-    return
-  endif
   let l:pats = []
   for l:t in l:tags
+    if l:t.sl == l:cur.sl && l:t.sc == l:cur.sc
+      continue
+    endif
     call extend(l:pats, s:TagPats(l:t))
   endfor
-  " Priority 1, not -1: vim-matchup highlights the same tags with matches of
-  " priority 0, and a lower priority would hide this background under them.
-  let w:jinja_block_id = matchadd('jinjaBlockHighlight', join(l:pats, '\|'), 1)
+  " Priority 1 and 2, not -1: vim-matchup highlights the same tags with
+  " matches of priority 0, and a lower priority would hide this background
+  " under them. This also covers the else/elif tags, which matchup paints in
+  " its own color: here they are grey instead.
+  if !empty(l:pats)
+    let w:jinja_block_id = matchadd('jinjaBlockHighlight',
+          \ join(l:pats, '\|'), 1)
+  endif
+  let l:pats = []
+  for l:t in l:mids
+    call extend(l:pats, s:TagPats(l:t))
+  endfor
+  if !empty(l:pats)
+    let w:jinja_block_mid_id = matchadd('jinjaBlockHighlightMid',
+          \ join(l:pats, '\|'), 1)
+  endif
+  let w:jinja_block_cur_id = matchadd('jinjaBlockHighlightCur',
+        \ join(s:TagPats(l:cur), '\|'), 2)
   let w:jinja_block_tags = l:tags
+  let w:jinja_block_state = l:state
 endfunction
 
 function! jinja#block_clear() abort
@@ -349,9 +424,71 @@ function! jinja#block_clear() abort
     silent! call matchdelete(w:jinja_block_id)
     unlet w:jinja_block_id
   endif
+  if exists('w:jinja_block_mid_id')
+    silent! call matchdelete(w:jinja_block_mid_id)
+    unlet w:jinja_block_mid_id
+  endif
+  if exists('w:jinja_block_cur_id')
+    silent! call matchdelete(w:jinja_block_cur_id)
+    unlet w:jinja_block_cur_id
+  endif
   if exists('w:jinja_block_tags')
     unlet w:jinja_block_tags
   endif
+  if exists('w:jinja_block_state')
+    unlet w:jinja_block_state
+  endif
+endfunction
+
+" Backgrounds only: the syntax colors of the tag text stay visible.
+"
+" Each background is copied from a standard group that follows the colorscheme
+" and 'background': ColorColumn for the opener and closer of the block,
+" CursorColumn for the other else/elif tags, MatchParen for the tag under the
+" cursor. Set g:jinja_block_highlight_colors to use other colors; a value is
+" either a group name (its background is copied) or "hi" arguments for the
+" group itself:
+"
+"   let g:jinja_block_highlight_colors = {
+"         \ 'cur': 'Search',
+"         \ 'mid': 'ctermbg=240 guibg=#3a3a3a',
+"         \ }
+function! jinja#block_colors() abort
+  if !get(g:, 'jinja_block_highlight', 1)
+    return
+  endif
+  let l:opts = get(g:, 'jinja_block_highlight_colors', {})
+  let l:dark = &background ==# 'dark'
+  " group, option key, default source group, [dark cterm, dark gui],
+  " [light cterm, light gui]. The colors are only used when the source group
+  " has no background, e.g. a colorscheme that only sets a foreground.
+  let l:groups = [
+        \ ['jinjaBlockHighlight', 'pair', 'ColorColumn',
+        \  ['1', 'DarkRed'], ['224', 'LightRed']],
+        \ ['jinjaBlockHighlightMid', 'mid', 'CursorColumn',
+        \  ['242', 'Grey40'], ['7', 'Grey90']],
+        \ ['jinjaBlockHighlightCur', 'cur', 'MatchParen',
+        \  ['6', 'DarkCyan'], ['14', 'Cyan']],
+        \ ]
+  for [l:group, l:role, l:def, l:fb_dark, l:fb_light] in l:groups
+    let l:val = get(l:opts, l:role, '')
+    if l:val =~# '='
+      execute 'hi ' . l:group . ' ' . l:val
+      continue
+    endif
+    let l:src = l:val ==# '' ? l:def : l:val
+    let l:fb = l:dark ? l:fb_dark : l:fb_light
+    let l:attrs = []
+    for l:i in [0, 1]
+      let l:mode = l:i == 0 ? 'cterm' : 'gui'
+      let l:v = synIDattr(synIDtrans(hlID(l:src)), 'bg', l:mode)
+      if l:v ==# ''
+        let l:v = l:fb[l:i]
+      endif
+      call add(l:attrs, l:mode . 'bg=' . l:v)
+    endfor
+    execute 'hi ' . l:group . ' ' . join(l:attrs, ' ')
+  endfor
 endfunction
 
 " Matches are window-local, so every window showing this buffer is cleared.
@@ -367,5 +504,15 @@ function! jinja#block_clear_all() abort
     endif
   endfor
 endfunction
+
+" The block highlight groups are global. Both a colorscheme reload and a
+" change of 'background' reset every highlight group, so the colors have to be
+" applied again. A colorscheme fires ColorScheme; 'background' does not, and
+" resets the groups before OptionSet runs.
+augroup jinja_block_colors
+  autocmd!
+  autocmd ColorScheme * call jinja#block_colors()
+  autocmd OptionSet background call jinja#block_colors()
+augroup END
 
 " vim:set sw=4:
