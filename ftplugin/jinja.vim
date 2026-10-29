@@ -71,24 +71,40 @@ let s:undo .= '|unlet! b:match_words b:match_skip b:match_ignorecase'
 " Folding, enabled by default. Set g:jinja_folding to 0 in vimrc to keep the
 " user's own fold settings.
 "
-" The expression returns an absolute fold level (a Number), not "="/"a1"/"s1".
-" With relative levels Vim re-evaluates the whole buffer after every change
-" (measured: four passes over all lines for one inserted character). Absolute
-" levels make Vim re-evaluate only the lines around the change.
+" The expression returns the absolute fold level of the line: a Number, or
+" ">N"/"<N" on a line where a fold must start/end (neighbouring blocks of the
+" same level would otherwise become one fold). Absolute levels keep Vim's
+" fold update local: it can read the level of the line above the change and
+" only re-evaluates from there. With relative levels ("aN"/"sN"/"=") Vim has
+" to walk back to the start of the file to find a known level and then
+" re-evaluates almost every line on each change (measured: about 24k of 25k).
+"
+" The catch is that Vim shifts the fold tree by the line count change and may
+" then reuse it with the wrong shape: after undoing a deletion a nested fold
+" disappeared. The listener therefore switches 'foldmethod' away and back on
+" every line count change, which makes Vim re-evaluate all lines from the
+" (correct) cached levels; the fold tree and its open/closed state are kept.
+" Text changes do not touch the tree and stay on the fast path.
 "
 " The level of every line is stored in one flat List, so a lookup is a single
 " index operation. matchbufline() (Vim 9.1.0009 or newer) collects the tags in
 " C; walking them line by line in Vim script cost hundreds of milliseconds on a
-" 25k line file. Tags inside {% raw %} are skipped while building the list.
+" 25k line file. The cache itself is built in autoload/jinja_fold.vim, which is
+" Vim9 script: compiled code cuts the remaining rebuild cost by an order of
+" magnitude. Vim without matchbufline() falls back to relative levels. Tags
+" inside {% raw %} and comments are skipped while building the list.
 "
-" A rebuild costs a few milliseconds, but Vim evaluates folds before buffered
-" listeners run, so checking b:changedtick there would rebuild on every
-" keystroke. Instead an unbuffered listener records which lines changed without
-" scanning the buffer, and the expression validates just those lines first: an
-" edit that leaves the block tags alone (typing text, reindenting) keeps the
-" cached levels. Vim before 9.1.1782 only has buffered listeners (the
-" {unbuffered} argument came later): the expression flushes them first, so
-" their changes arrive before they are validated.
+" Vim evaluates folds before buffered listeners run, so checking
+" b:changedtick in the expression would rebuild on every keystroke. Instead an
+" unbuffered listener records which lines changed without scanning the buffer,
+" and the expression validates just those lines first: an edit that leaves the
+" block tags alone (typing text, reindenting) keeps the cached levels. Vim
+" before 9.1.1782 only has buffered listeners (the {unbuffered} argument came
+" later). Their events only arrive after the fold evaluation: the expression
+" runs during the change itself, and listener_flush() there drops the pending
+" events (of every listener). So on those Vims the expression rebuilds the
+" cache on each change, and a changed line count makes it set a flag that
+" FoldFix() turns into the same 'foldmethod' switch on the next autocmd.
 if get(g:, 'jinja_folding', 1)
   let s:tag_start = s:bs . '[-+]\?\s*'
   let s:fold_names = s:block_names
@@ -99,9 +115,6 @@ if get(g:, 'jinja_folding', 1)
     let s:fold_close['end' . s:name] = 1
   endfor
   unlet s:name
-  " Set when listener_add() has no {unbuffered} argument: the listener is then
-  " buffered and JinjaFoldLevel() has to flush it before reading its changes.
-  let s:fold_flush = 0
   let s:comment_open = escape(s:delims.comment_start, '\.*$^~[]')
   let s:comment_close = escape(s:delims.comment_end, '\.*$^~[]')
   let b:jinja_fold_pats = {
@@ -112,287 +125,113 @@ if get(g:, 'jinja_folding', 1)
         \         . s:tag_start . '\zs\%(' . join(s:fold_names, '\|')
         \         . '\|raw\|end\w\+\)\>',
         \ 'tag': s:tag_start . '\a',
-        \ 'open': s:tag_start . '\%(' . join(s:fold_names + ['raw'], '\|') . '\)\>',
-        \ 'close': s:tag_start . 'end\w\+\>',
+        \ 'name_pat': s:tag_start . '\zs\a\w*',
+        \ 'open_names': s:fold_open,
+        \ 'close_names': s:fold_close,
+        \ 'cstart': s:delims.comment_start,
+        \ 'cend': s:delims.comment_end,
         \ }
+  " Set when the listener is unusable (Vim before 9.1.1782): the fold
+  " expression then rebuilds the cache on every change.
+  let b:jinja_fold_rebuild = 0
   let b:jinja_fold_cache = {
-        \ 'tick': -1, 'levels': [], 'tail': 0, 'sig': {}, 'fake': {},
-        \ 'chg_any': 0, 'chg_added': 0, 'chg_lo': 0, 'chg_hi': 0,
+        \ 'tick': -1, 'levels': [], 'tail': 0, 'sig': [], 'fake': {},
+        \ 'chg_n': 0, 'chg_added': 0, 'chg_lo': 0, 'chg_hi': 0,
         \ }
 
-  if !exists('*JinjaFoldLevel')
-    function! JinjaFoldLevel(lnum) abort
-      let l:c = b:jinja_fold_cache
-      if l:c.tick != b:changedtick
-        if s:fold_flush
-          call listener_flush()
-        endif
-        call s:FoldRefresh(l:c)
+  let s:fold_fast = 0
+  if exists('*matchbufline')
+    " The foldexpr and the cache live in autoload/jinja_fold.vim: Vim9
+    " compiles the loops over the tags, which take most of the rebuild time.
+    " Its functions are global because a Vim9 script cannot define the
+    " jinja_fold#...() names legacy script would call.
+    if !exists('*JinjaFoldLevel')
+      let s:fold_file = expand('<sfile>:p:h:h') . '/autoload/jinja_fold.vim'
+      if filereadable(s:fold_file)
+        execute 'source' fnameescape(s:fold_file)
       endif
-      return get(l:c.levels, a:lnum - 1, l:c.tail)
-    endfunction
-
-    " Fallback for Vim without matchbufline(): relative levels, stateless.
+    endif
+    if exists('*JinjaFoldLevel')
+      let s:fold_fast = 1
+      setlocal foldexpr=JinjaFoldLevel(v:lnum)
+    endif
+  endif
+  if !s:fold_fast
+    " Fallback for Vim without matchbufline(), or when the autoload file is
+    " missing: relative levels, stateless.
     " This is correct but makes Vim re-evaluate the buffer after each change.
+    " Whether a tag lies inside {% raw %} or a comment is taken from the
+    " syntax; without it there is no way to know in a stateless expression.
     function! JinjaFoldLevelRel(lnum) abort
       let l:line = getline(a:lnum)
       let l:pats = b:jinja_fold_pats
       if stridx(l:line, l:pats.bs) < 0 || l:line !~# l:pats.tag
         return '='
       endif
-      if exists('b:current_syntax')
-        let l:col = match(l:line, l:pats.tag)
-        if l:col >= 0 && synIDattr(synID(a:lnum, l:col + 1, 1), 'name') ==# 'jinjaRaw'
-          return '='
+      let l:check = exists('b:current_syntax')
+      let l:opens = 0
+      let l:closes = 0
+      let l:col = match(l:line, l:pats.tag)
+      while l:col >= 0
+        let l:at = match(l:line, l:pats.name_pat, l:col)
+        let l:name = matchstr(l:line, l:pats.name_pat, l:col)
+        let l:group = l:check
+              \ ? synIDattr(synID(a:lnum, l:at + 1, 1), 'name')
+              \ : ''
+        if l:group !=# 'jinjaRaw' && l:group !=# 'jinjaComBlock'
+          if l:name ==# 'raw' || has_key(l:pats.open_names, l:name)
+            let l:opens += 1
+          elseif l:name ==# 'endraw'
+                \ || has_key(l:pats.close_names, l:name)
+            let l:closes += 1
+          endif
         endif
-      endif
-      let l:open = l:line =~# l:pats.open
-      let l:close = l:line =~# l:pats.close
-      if l:open && !l:close
-        return 'a1'
-      elseif l:close && !l:open
-        return 's1'
+        let l:col = match(l:line, l:pats.tag, l:col + 1)
+      endwhile
+      let l:net = l:opens - l:closes
+      if l:net > 0
+        return 'a' . l:net
+      elseif l:net < 0
+        return 's' . (-l:net)
       endif
       return '='
     endfunction
+    setlocal foldexpr=JinjaFoldLevelRel(v:lnum)
+  endif
 
-    " Records where a tag-looking match inside raw or a comment starts. The
-    " fold match starts at the name; back up to the block start delimiter.
-    function! s:FakeTag(fake, lnum, byteidx, name) abort
-      if a:name ==# b:jinja_fold_pats.comment_start
-            \ || a:name ==# b:jinja_fold_pats.comment_end
-        return
-      endif
-      let l:pos = strridx(getline(a:lnum), b:jinja_fold_pats.bs, a:byteidx)
-      if l:pos >= 0
-        if has_key(a:fake, a:lnum)
-          call add(a:fake[a:lnum], l:pos)
-        else
-          let a:fake[a:lnum] = [l:pos]
+  if s:fold_fast && exists('*listener_add')
+    " The {unbuffered} argument was added in Vim 9.1.1782, older Vims throw
+    " E118 for it. A buffered listener is no use here (see the comment above),
+    " so the cache is rebuilt on each change instead. Since the expression
+    " cannot switch 'foldmethod', a line count change only sets a flag; the
+    " autocmd below does the rebuild once the fold evaluation is over.
+    let s:fold_listener = 0
+    try
+      let s:fold_listener = listener_add(function('JinjaFoldListen'), bufnr('%'), v:true)
+    catch /^Vim\%((\a\+)\)\=:E118:/
+      let b:jinja_fold_rebuild = 1
+      function! s:FoldFix() abort
+        if !get(b:, 'jinja_fold_fix', 0)
+          return
         endif
-      endif
-    endfunction
-
-    " Every match inside raw or a comment, by line. Without syntax
-    " highlighting this is the only way to tell such text from a real tag, so
-    " it is only collected when the syntax is off: the pass is not cheap, and
-    " normally comments and raw bodies are recognized from the syntax.
-    function! s:FakeTags(matches) abort
-      let l:fake = {}
-      let l:raw = 0
-      let l:comment = 0
-      for l:m in a:matches
-        let l:name = l:m.text
-        if l:raw
-          if l:name ==# 'endraw'
-            let l:raw = 0
-          else
-            call s:FakeTag(l:fake, l:m.lnum, l:m.byteidx, l:name)
-          endif
-        elseif l:comment
-          if l:name ==# b:jinja_fold_pats.comment_end
-            let l:comment = 0
-          else
-            call s:FakeTag(l:fake, l:m.lnum, l:m.byteidx, l:name)
-          endif
-        elseif l:name ==# b:jinja_fold_pats.comment_start
-          let l:comment = 1
-        elseif l:name ==# 'raw'
-          let l:raw = 1
-        endif
-      endfor
-      return l:fake
-    endfunction
-
-    function! s:FoldLevels() abort
-      let l:matches = matchbufline(bufnr('%'), b:jinja_fold_pats.find, 1, '$')
-      let l:deltas = {}
-      let l:sig = {}
-      " Tag-looking text inside raw and comments, by line, for highlighting:
-      " it is not a real tag and must not be matched as one.
-      let l:fake = {}
-      let l:raw = 0
-      let l:comment = 0
-      let l:i = 0
-      let l:n = len(l:matches)
-      while l:i < l:n
-        let l:lnum = l:matches[l:i].lnum
-        let l:names = []
-        let l:opens = 0
-        let l:closes = 0
-        while l:i < l:n && l:matches[l:i].lnum == l:lnum
-          let l:name = l:matches[l:i].text
-          call add(l:names, l:name)
-          let l:i += 1
-          if l:raw
-            if l:name ==# 'endraw'
-              let l:raw = 0
-              let l:closes += 1
-            endif
-          elseif l:comment
-            if l:name ==# b:jinja_fold_pats.comment_end
-              let l:comment = 0
-            endif
-          elseif l:name ==# b:jinja_fold_pats.comment_start
-            let l:comment = 1
-          elseif l:name ==# 'raw'
-            let l:raw = 1
-            let l:opens += 1
-          elseif has_key(s:fold_open, l:name)
-            let l:opens += 1
-          elseif has_key(s:fold_close, l:name)
-            let l:closes += 1
-          endif
-        endwhile
-        " The joined names let the listener below detect edits that do not
-        " change what the line contributes to the fold structure.
-        let l:sig[l:lnum] = join(l:names, ',')
-        if l:opens > 0 && l:closes > 0
-          " A line opening and closing a block does not start a fold.
-          let l:opens = 0
-          let l:closes = 0
-        endif
-        if l:opens > 0
-          let l:deltas[l:lnum] = get(l:deltas, l:lnum, 0) + l:opens
-        elseif l:closes > 0
-          " The line with the end tag still belongs to the fold.
-          let l:deltas[l:lnum + 1] = get(l:deltas, l:lnum + 1, 0) - l:closes
-        endif
-      endwhile
-      if get(g:, 'jinja_block_highlight', 1) && !exists('b:current_syntax')
-        let l:fake = s:FakeTags(l:matches)
-      endif
-
-      " Expand the deltas to one level per line. repeat() and extend() run in C.
-      let l:levels = []
-      let l:lvl = 0
-      let l:prev = 1
-      for l:lnum in sort(map(keys(l:deltas), 'str2nr(v:val)'), 'n')
-        if l:lnum > l:prev
-          call extend(l:levels, repeat([l:lvl], l:lnum - l:prev))
-        endif
-        let l:lvl += l:deltas[l:lnum]
-        if l:lvl < 0
-          let l:lvl = 0
-        endif
-        let l:prev = l:lnum
-      endfor
-      let l:last = line('$')
-      if l:last >= l:prev
-        call extend(l:levels, repeat([l:lvl], l:last - l:prev + 1))
-      endif
-
-      let l:c = b:jinja_fold_cache
-      let l:c.tick = b:changedtick
-      let l:c.levels = l:levels
-      let l:c.tail = empty(l:levels) ? l:lvl : l:levels[-1]
-      let l:c.sig = l:sig
-      let l:c.fake = l:fake
-      let l:c.chg_any = 0
-      let l:c.chg_added = 0
-      let l:c.chg_lo = 0
-      let l:c.chg_hi = 0
-    endfunction
-
-    " Runs when b:changedtick moved. Only the lines reported by the listener
-    " below are checked; everything else is trusted to be unchanged.
-    function! s:FoldRefresh(c) abort
-      if !a:c.chg_any || a:c.chg_added || len(a:c.levels) != line('$')
-        call s:FoldLevels()
-      elseif s:FoldSigSame(a:c, a:c.chg_lo, a:c.chg_hi)
-        let a:c.tick = b:changedtick
-        let a:c.chg_any = 0
-        let a:c.chg_lo = 0
-        let a:c.chg_hi = 0
-      else
-        call s:FoldLevels()
-        " Vim only re-evaluates the changed lines and stops as soon as their
-        " level is unchanged; assigning 'foldexpr' makes it recompute them all.
-        let &l:foldexpr = &l:foldexpr
-      endif
-    endfunction
-
-    " Unbuffered listener: called for every change, before folds are evaluated.
-    " It only records where the change is; scanning the buffer here would cost
-    " much more than keeping the levels and checking the changed lines later.
-    function! s:FoldListen(bufnr, start, end, added, changes) abort
-      let l:c = a:bufnr == bufnr('%') ? get(b:, 'jinja_fold_cache', {})
-            \ : getbufvar(a:bufnr, 'jinja_fold_cache', {})
-      if empty(l:c)
-        return
-      endif
-      if a:added != 0
-        let l:c.chg_added = 1
-      else
-        if !l:c.chg_any || a:start < l:c.chg_lo
-          let l:c.chg_lo = a:start
-        endif
-        " s:FoldSigSame() clamps to the buffer it is evaluating, which is not
-        " necessarily the one that was changed here.
-        if a:end - 1 > l:c.chg_hi
-          let l:c.chg_hi = a:end - 1
-        endif
-      endif
-      let l:c.chg_any = 1
-    endfunction
-
-    function! s:FoldSigSame(cache, lo, hi) abort
-      let l:last = line('$')
-      let l:lo = a:lo < 1 ? 1 : a:lo
-      let l:hi = a:hi > l:last ? l:last : a:hi
-      if l:lo > l:hi
-        return 1
-      endif
-      let l:seen = {}
-      for l:m in matchbufline(bufnr('%'), b:jinja_fold_pats.find, l:lo, l:hi)
-        let l:ln = l:m.lnum
-        if has_key(l:seen, l:ln)
-          let l:seen[l:ln] .= ',' . l:m.text
-        else
-          let l:seen[l:ln] = l:m.text
-        endif
-      endfor
-      for [l:ln, l:names] in items(l:seen)
-        if get(a:cache.sig, l:ln, '') !=# l:names
-          return 0
-        endif
-      endfor
-      " A line that had tags before and has none now is not in seen.
-      for l:ln in keys(a:cache.sig)
-        let l:n = str2nr(l:ln)
-        if l:n >= l:lo && l:n <= l:hi && !has_key(l:seen, l:ln)
-          return 0
-        endif
-      endfor
-      return 1
-    endfunction
+        let b:jinja_fold_fix = 0
+        noautocmd setlocal foldmethod=manual
+        noautocmd setlocal foldmethod=expr
+      endfunction
+      augroup jinja_fold
+        autocmd! * <buffer>
+        autocmd TextChanged,TextChangedI,InsertLeave,BufWinEnter,WinEnter,
+              \CursorMoved,CursorMovedI <buffer> call s:FoldFix()
+      augroup END
+      let s:undo .= '|autocmd! jinja_fold * <buffer>|unlet! b:jinja_fold_fix'
+    endtry
+    if s:fold_listener
+      let s:undo .= '|call listener_remove(' . s:fold_listener . ')'
+    endif
   endif
 
   setlocal foldmethod=expr
-  if exists('*matchbufline')
-    setlocal foldexpr=JinjaFoldLevel(v:lnum)
-    if exists('*listener_add')
-      " The {unbuffered} argument was added in Vim 9.1.1782. Older Vims throw
-      " E118 for it; without a way to flush a buffered listener early a change
-      " is only seen after the folds were evaluated, so the cache is then
-      " rebuilt on every change instead.
-      let s:fold_listener = 0
-      try
-        let s:fold_listener = listener_add(function('s:FoldListen'), bufnr('%'), v:true)
-      catch /^Vim\%((\a\+)\)\=:E118:/
-        if exists('*listener_flush')
-          let s:fold_listener = listener_add(function('s:FoldListen'), bufnr('%'))
-          let s:fold_flush = 1
-        endif
-      endtry
-      if s:fold_listener
-        let s:undo .= '|call listener_remove(' . s:fold_listener . ')'
-      endif
-    endif
-  else
-    setlocal foldexpr=JinjaFoldLevelRel(v:lnum)
-  endif
-  let s:undo .= '|setlocal foldmethod< foldexpr<|unlet! b:jinja_fold_pats b:jinja_fold_cache'
+  let s:undo .= '|setlocal foldmethod< foldexpr<|unlet! b:jinja_fold_pats b:jinja_fold_cache b:jinja_fold_rebuild'
 endif
 
 " Block tag parsing, shared by the block highlight, `%` and the indent file.
