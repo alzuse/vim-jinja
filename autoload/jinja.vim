@@ -310,11 +310,12 @@ function! jinja#jump() abort
 endfunction
 
 " Called from TextChangedI in the indent file. When the line just became
-" nothing but a block closing tag, line it up with the tag that opened the
-" block: typing "%>" then undoes the indent the body left on the line. Only a
-" tag that starts the line is touched. The name counts as well as the end
-" delimiter, so a tag whose delimiters were typed first ("<% %>") is lined up
-" as soon as "endif" fills it in. Returns 1 when the line was reindented.
+" nothing but a block closing tag or an else/elif, line it up with the tag
+" that opened the block: typing "%>" then undoes the indent the body left on
+" the line. Only a tag that starts the line is touched. The name counts as
+" well as the end delimiter, so a tag whose delimiters were typed first
+" ("<% %>") is lined up as soon as "endif" or "else" fills it in. Returns 1
+" when the line was reindented.
 function! jinja#align_close() abort
   if !get(g:, 'jinja_close_indent', 1)
     return 0
@@ -332,13 +333,16 @@ function! jinja#align_close() abort
   endif
   let l:col = match(l:line, '\S') + 1
   let l:t = s:TagFromStart(l:lnum, l:col)
-  if empty(l:t) || l:t.kind !=# 'close' || s:InSkip(l:lnum, l:col)
+  if empty(l:t) || (l:t.kind !=# 'close' && l:t.kind !=# 'mid')
+        \ || s:InSkip(l:lnum, l:col)
     return 0
   endif
   " The tag must end on this line and nothing but whitespace may follow it.
   if l:t.el != l:lnum || strpart(l:line, l:t.ec - 1) =~# '\S'
     return 0
   endif
+  " The backward scan counts only openers and closers, so for an else/elif it
+  " finds the if/for of the chain.
   let l:open = s:FindOpen(l:t)
   if empty(l:open)
     return 0

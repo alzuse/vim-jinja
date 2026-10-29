@@ -86,7 +86,9 @@ let s:undo .= '|unlet! b:match_words b:match_skip b:match_ignorecase'
 " keystroke. Instead an unbuffered listener records which lines changed without
 " scanning the buffer, and the expression validates just those lines first: an
 " edit that leaves the block tags alone (typing text, reindenting) keeps the
-" cached levels.
+" cached levels. Vim before 9.1.1782 only has buffered listeners (the
+" {unbuffered} argument came later): the expression flushes them first, so
+" their changes arrive before they are validated.
 if get(g:, 'jinja_folding', 1)
   let s:tag_start = s:bs . '[-+]\?\s*'
   let s:fold_names = s:block_names
@@ -97,6 +99,9 @@ if get(g:, 'jinja_folding', 1)
     let s:fold_close['end' . s:name] = 1
   endfor
   unlet s:name
+  " Set when listener_add() has no {unbuffered} argument: the listener is then
+  " buffered and JinjaFoldLevel() has to flush it before reading its changes.
+  let s:fold_flush = 0
   let s:comment_open = escape(s:delims.comment_start, '\.*$^~[]')
   let s:comment_close = escape(s:delims.comment_end, '\.*$^~[]')
   let b:jinja_fold_pats = {
@@ -119,6 +124,9 @@ if get(g:, 'jinja_folding', 1)
     function! JinjaFoldLevel(lnum) abort
       let l:c = b:jinja_fold_cache
       if l:c.tick != b:changedtick
+        if s:fold_flush
+          call listener_flush()
+        endif
         call s:FoldRefresh(l:c)
       endif
       return get(l:c.levels, a:lnum - 1, l:c.tail)
@@ -364,8 +372,22 @@ if get(g:, 'jinja_folding', 1)
   if exists('*matchbufline')
     setlocal foldexpr=JinjaFoldLevel(v:lnum)
     if exists('*listener_add')
-      let s:fold_listener = listener_add(function('s:FoldListen'), bufnr('%'), v:true)
-      let s:undo .= '|call listener_remove(' . s:fold_listener . ')'
+      " The {unbuffered} argument was added in Vim 9.1.1782. Older Vims throw
+      " E118 for it; without a way to flush a buffered listener early a change
+      " is only seen after the folds were evaluated, so the cache is then
+      " rebuilt on every change instead.
+      let s:fold_listener = 0
+      try
+        let s:fold_listener = listener_add(function('s:FoldListen'), bufnr('%'), v:true)
+      catch /^Vim\%((\a\+)\)\=:E118:/
+        if exists('*listener_flush')
+          let s:fold_listener = listener_add(function('s:FoldListen'), bufnr('%'))
+          let s:fold_flush = 1
+        endif
+      endtry
+      if s:fold_listener
+        let s:undo .= '|call listener_remove(' . s:fold_listener . ')'
+      endif
     endif
   else
     setlocal foldexpr=JinjaFoldLevelRel(v:lnum)
