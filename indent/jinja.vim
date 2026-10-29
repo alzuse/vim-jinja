@@ -1,6 +1,6 @@
 " Vim indent file
-" Language: Jinja HTML template
-" Maintainer: Evan Hammer <evan@evanhammer.com>
+" Language: Jinja template
+" Maintainer: Al Z <alzuse@126.com>
 " Last Change: Oct 27, 2026
 
 " Only load this indent file when no other was loaded.

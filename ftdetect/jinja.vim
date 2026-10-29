@@ -1,3 +1,7 @@
+" Language: Jinja template
+" Maintainer: Al Z <alzuse@126.com>
+" Last Change: Oct 27, 2026
+"
 augroup jinja_ftdetect
   autocmd!
   " "set ft" instead of "setfiletype": files starting with "<%" are

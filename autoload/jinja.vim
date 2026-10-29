@@ -1,4 +1,7 @@
 " Vim autoload file
+" Language: Jinja template
+" Maintainer: Al Z <alzuse@126.com>
+" Last Change: Oct 27, 2026
 
 " All delimiter settings in one place. Scripts call this once at the top and
 " keep the result; defaults are not repeated at the places that use them.

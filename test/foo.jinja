@@ -1,0 +1,131 @@
+# TODO: 
+
+<$a$>
+<% if a %>
+a line for test
+<% if foo %>
+<$ xyz $>
+if foo:
+print("AAA")
+else:
+print("BBB")
+<% for x in x_lis %>
+<% if x == 1%>
+aaa
+<% if y == 1%>
+<% if z == "a"%>
+aaaa
+bbbb
+<%endif%>
+xxx
+<% elif y === 2 %>
+xxxx2
+<% if aa==3
+and bb = 4 %>
+<% if z == 3 %>
+zzz3
+<% endif %>
+<# fooo #>
+<#  aaa
+bbb
+ccc
+#>
+<% if x = 2
+and b == 23 %>
+aaa
+<% endif%>
+<% endif %>
+<% endif %>
+
+
+<% endif %>
+<$ bbbb $>
+<% endfor %>
+a = <%if x == 4%> bbb <%endif%>
+
+<% elif x == "#"%>
+xxx
+<% elif x == 3%>
+xxx
+<% else %>
+yyyy
+<% endif %>
+<% else %>
+fooo
+another strange line
+<% endif %>
+<% if aaa %>
+<$aaa$>
+<%endif%>
+
+<$ "sd%s" | format(a) $>
+<# hehehehe #>
+<$ hehe | pround(4)$>
+<$ hehe | abs(4)$>
+
+<% if x == 2 %>
+    bbbb
+<% endif %>
+
+
+<% macro foo(a, b) %>
+    something
+<% endmacro %>
+
+<% macro foo(a,
+             b) %>
+    <% if a == 2
+      and b == 3%>
+  aaaaaaa
+    <% endif %>
+    something
+<% endmacro %>
+<%- if aaa == 4-%>
+    aaa4
+<%elif aaa == 5.1%>
+    aaa6
+<%elif aaa == 5.2 %>
+    aaa6
+<% elif aaa == 5.3%>
+    aaa6
+<% elif aaa == 5.3 %>
+    aaa6
+<%-elif aaa == 6.1%>
+    aaa6
+<%-elif aaa == 6.2 %>
+    aaa6
+<%- elif aaa == 6.3%>
+    aaa6
+<%- elif aaa == 6.3 %>
+    aaa6
+<%elif aaa == 6.1-%>
+    aaa6
+<%elif aaa == 6.2 -%>
+    aaa6
+<% elif aaa == 6.3-%>
+    aaa6
+<% elif aaa == 6.3 -%>
+    aaa6
+<%-elif aaa == 6.1-%>
+    aaa6
+<%-elif aaa == 6.2 -%>
+    aaa6
+<%- elif aaa == 6.3-%>
+    aaa6
+<%- elif aaa == 6.4 -%>
+    aaa6
+<% elif aaa == 60 -%>
+    60606
+    <% if bbb == 7 %>
+    bbb7
+    <% elif bbb == 8 %>
+    bbb8
+    <% elif bbb == 9 %>
+    bbb9
+    <% else %>
+    bbb0
+    <% endif%>
+    aaa6
+<% else %>
+    aaa8
+<% endif%>

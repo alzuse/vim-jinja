@@ -28,7 +28,6 @@ Jinja bundle for vim.
 
 ### Install with [Vundle](https://github.com/gmarik/vundle)
 
-If you are not using vundle, you really should have a try.
 Edit your vimrc:
 
     Bundle "alzuse/vim-jinja"
@@ -41,7 +40,9 @@ And install it:
 
 ### Install with [Plug](https://github.com/junegunn/vim-plug)
 
-If you prefer Plug, Edit your vimrc:
+If you are not using `Plug`, you really should have a try.
+
+Edit your vimrc:
 
     Plug "alzuse/vim-jinja"
 
